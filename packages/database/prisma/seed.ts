@@ -42,7 +42,6 @@ async function main() {
         },
       },
     },
-    include: { branches: true },
   });
 
   const category = await prisma.category.create({

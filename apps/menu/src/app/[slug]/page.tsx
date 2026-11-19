@@ -1,0 +1,77 @@
+import { notFound } from 'next/navigation';
+import { prisma } from '@repo/database';
+import MenuStorefront from '@/components/MenuStorefront';
+
+export default async function TenantMenuPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug },
+    include: {
+      categories: {
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+        include: {
+          products: {
+            where: { isAvailable: true },
+            include: {
+              modifiers: {
+                orderBy: { sortOrder: 'asc' },
+                include: {
+                  modifierGroup: {
+                    include: {
+                      options: { where: { isAvailable: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!tenant) notFound();
+
+  const theme = (tenant.themeConfig as { primaryColor?: string }) || {};
+
+  const serializedCategories = tenant.categories.map((cat) => ({
+    id: cat.id,
+    name: cat.name,
+    products: cat.products.map((prod) => ({
+      id: prod.id,
+      name: prod.name,
+      description: prod.description,
+      basePrice: Number(prod.basePrice),
+      modifiers: prod.modifiers.map((pm) => ({
+        id: pm.modifierGroup.id,
+        name: pm.modifierGroup.name,
+        minSelect: pm.modifierGroup.minSelect,
+        maxSelect: pm.modifierGroup.maxSelect,
+        options: pm.modifierGroup.options.map((opt) => ({
+          id: opt.id,
+          name: opt.name,
+          priceDelta: Number(opt.priceDelta),
+        })),
+      })),
+    })),
+  }));
+
+  return (
+    <MenuStorefront
+      tenant={{
+        name: tenant.name,
+        slug: tenant.slug,
+        currency: tenant.currency,
+        whatsappPhone: tenant.whatsappPhone,
+        primaryColor: theme.primaryColor || '#E11D48',
+      }}
+      categories={serializedCategories}
+    />
+  );
+}

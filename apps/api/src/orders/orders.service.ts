@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { prisma } from '@repo/database';
 import { calculateOrderTotals, CartItemInput } from '@repo/pricing';
 
@@ -25,9 +25,16 @@ export class OrdersService {
       throw new NotFoundException(`Comercio "${dto.slug}" no encontrado`);
     }
 
-    const branchId = dto.branchId || tenant.branches[0]?.id;
+    let branchId = dto.branchId || tenant.branches[0]?.id;
     if (!branchId) {
-      throw new BadRequestException(`El comercio "${dto.slug}" no tiene sucursales configuradas`);
+      const createdBranch = await prisma.branch.create({
+        data: {
+          tenantId: tenant.id,
+          name: 'Sede Principal',
+          address: 'Direccion principal',
+        },
+      });
+      branchId = createdBranch.id;
     }
 
     const totals = calculateOrderTotals({ items: dto.items || [] });

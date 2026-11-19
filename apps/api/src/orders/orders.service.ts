@@ -45,7 +45,7 @@ export class OrdersService {
         branchId,
         orderNumber: nextOrderNumber,
         clientGeneratedId: dto.clientGeneratedId || null,
-        type: dto.deliveryAddress ? 'DELIVERY' : 'TAKEDOUT',
+        type: dto.deliveryAddress ? 'DELIVERY' : 'TAKEOUT',
         status: 'PENDING',
         customerName: dto.customerName || 'Cliente Menu Digital',
         customerPhone: dto.customerPhone || null,

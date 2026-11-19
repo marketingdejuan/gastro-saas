@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { CartItemInput } from '@repo/pricing';
-import { StorefrontService } from './storefront.service';
+import { StorefrontService } from './storefront.service.js';
 
 @Controller('storefront')
 export class StorefrontController {

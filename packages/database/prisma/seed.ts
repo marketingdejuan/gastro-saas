@@ -32,17 +32,25 @@ async function main() {
         primaryColor: '#E11D48',
         mode: 'orders_and_whatsapp',
       },
-      branches: {
-        create: {
-          name: 'Sede Principal',
-          address: 'Calle 10 # 40-12',
-          tables: {
-            create: [{ name: 'Mesa 1' }, { name: 'Mesa 2' }],
-          },
-        },
-      },
     },
   });
+
+  const existingBranch = await prisma.branch.findFirst({
+    where: { tenantId: tenant.id },
+  });
+
+  if (!existingBranch) {
+    await prisma.branch.create({
+      data: {
+        tenantId: tenant.id,
+        name: 'Sede Principal',
+        address: 'Calle 10 # 40-12',
+        tables: {
+          create: [{ name: 'Mesa 1' }, { name: 'Mesa 2' }],
+        },
+      },
+    });
+  }
 
   const existingCategory = await prisma.category.findFirst({
     where: { tenantId: tenant.id, name: 'Hamburguesas' },
@@ -93,7 +101,7 @@ async function main() {
     });
   }
 
-  console.log('Seed listo para:', tenant.slug);
+  console.log('Seed completado correctamente para:', tenant.slug);
 }
 
 main()

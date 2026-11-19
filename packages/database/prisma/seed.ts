@@ -44,50 +44,56 @@ async function main() {
     },
   });
 
-  const category = await prisma.category.create({
-    data: {
-      tenantId: tenant.id,
-      name: 'Hamburguesas',
-      sortOrder: 1,
-    },
+  const existingCategory = await prisma.category.findFirst({
+    where: { tenantId: tenant.id, name: 'Hamburguesas' },
   });
 
-  const toppingsGroup = await prisma.modifierGroup.create({
-    data: {
-      tenantId: tenant.id,
-      name: 'Adiciones',
-      minSelect: 0,
-      maxSelect: 5,
-      options: {
-        create: [
-          { tenantId: tenant.id, name: 'Tocineta ahumada', priceDelta: 4500 },
-          { tenantId: tenant.id, name: 'Queso cheddar extra', priceDelta: 3500 },
-          { tenantId: tenant.id, name: 'Papas en casco', priceDelta: 6000 },
-        ],
+  if (!existingCategory) {
+    const category = await prisma.category.create({
+      data: {
+        tenantId: tenant.id,
+        name: 'Hamburguesas',
+        sortOrder: 1,
       },
-    },
-  });
+    });
 
-  const product = await prisma.product.create({
-    data: {
-      tenantId: tenant.id,
-      categoryId: category.id,
-      name: 'Clásica de la Casa',
-      description: 'Carne artesanal 150g, queso, lechuga, tomate y salsa especial.',
-      basePrice: 22000,
-      images: [],
-    },
-  });
+    const toppingsGroup = await prisma.modifierGroup.create({
+      data: {
+        tenantId: tenant.id,
+        name: 'Adiciones',
+        minSelect: 0,
+        maxSelect: 5,
+        options: {
+          create: [
+            { tenantId: tenant.id, name: 'Tocineta ahumada', priceDelta: 4500 },
+            { tenantId: tenant.id, name: 'Queso cheddar extra', priceDelta: 3500 },
+            { tenantId: tenant.id, name: 'Papas en casco', priceDelta: 6000 },
+          ],
+        },
+      },
+    });
 
-  await prisma.productModifierGroup.create({
-    data: {
-      productId: product.id,
-      modifierGroupId: toppingsGroup.id,
-      sortOrder: 1,
-    },
-  });
+    const product = await prisma.product.create({
+      data: {
+        tenantId: tenant.id,
+        categoryId: category.id,
+        name: 'Clásica de la Casa',
+        description: 'Carne artesanal 150g, queso, lechuga, tomate y salsa especial.',
+        basePrice: 22000,
+        images: [],
+      },
+    });
 
-  console.log('Seed completado. Restaurante demo slug:', tenant.slug);
+    await prisma.productModifierGroup.create({
+      data: {
+        productId: product.id,
+        modifierGroupId: toppingsGroup.id,
+        sortOrder: 1,
+      },
+    });
+  }
+
+  console.log('Seed listo para:', tenant.slug);
 }
 
 main()

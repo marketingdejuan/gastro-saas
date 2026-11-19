@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { calculateOrderTotals, CartItemInput } from '@repo/pricing';
-import { ShoppingBag, Plus, Minus, MessageCircle, X, Check } from 'lucide-react';
+import { useState } from "react";
+import { calculateOrderTotals, CartItemInput } from "@repo/pricing";
+import { ShoppingBag, Plus, Minus, MessageCircle, X, Check } from "lucide-react";
 
 interface ModifierOption {
   id: string;
@@ -48,13 +48,13 @@ export default function MenuStorefront({ tenant, categories }: Props) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, ModifierOption[]>>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [customerName, setCustomerName] = useState('');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [customerName, setCustomerName] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
 
   const formatMoney = (amount: number) =>
-    new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: tenant.currency || 'COP',
+    new Intl.NumberFormat("es-CO", {
+      style: "currency",
+      currency: tenant.currency || "COP",
       maximumFractionDigits: 0,
     }).format(amount);
 
@@ -102,7 +102,7 @@ export default function MenuStorefront({ tenant, categories }: Props) {
     setCart((prev) =>
       prev
         .map((item, idx) => (idx === index ? { ...item, quantity: item.quantity + delta } : item))
-        .filter((item) => item.quantity > 0),
+        .filter((item) => item.quantity > 0)
     );
   };
 
@@ -113,25 +113,25 @@ export default function MenuStorefront({ tenant, categories }: Props) {
     const lines = cart.map((item, i) => {
       const modsText =
         item.modifiers && item.modifiers.length > 0
-          ? ` (${item.modifiers.map((m) => `+${m.name}`).join(', ')})`
-          : '';
-      return `${item.quantity}x ${item.name}${modsText} - ${formatMoney(totals.itemsBreakdown[i].lineTotal)}`;
+          ? " (" + item.modifiers.map((m) => "+" + m.name).join(", ") + ")"
+          : "";
+      return item.quantity + "x " + item.name + modsText + " - " + formatMoney(totals.itemsBreakdown[i].lineTotal);
     });
 
     const message = [
-      `Hola *${tenant.name}*, quiero hacer un pedido:`,
-      '',
+      "Hola *" + tenant.name + "*, quiero hacer un pedido:",
+      "",
       ...lines,
-      '',
-      `*Total: ${formatMoney(totals.total)}*`,
-      customerName ? `Cliente: ${customerName}` : '',
-      deliveryAddress ? `Dirección: ${deliveryAddress}` : 'Modalidad: Recoger en local',
+      "",
+      "*Total: " + formatMoney(totals.total) + "*",
+      customerName ? "Cliente: " + customerName : "",
+      deliveryAddress ? "Direccion: " + deliveryAddress : "Modalidad: Recoger en local",
     ]
       .filter(Boolean)
-      .join('\n');
+      .join("\n");
 
-    const url = `https://wa.me/${tenant.whatsappPhone}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+    const url = "https://wa.me/" + tenant.whatsappPhone + "?text=" + encodeURIComponent(message);
+    window.open(url, "_blank");
   };
 
   return (
@@ -142,7 +142,7 @@ export default function MenuStorefront({ tenant, categories }: Props) {
       >
         <div className="mx-auto max-w-2xl">
           <h1 className="text-2xl font-bold tracking-tight">{tenant.name}</h1>
-          <p className="text-sm text-white/90">Menú Digital • Pedidos directos sin comisiones</p>
+          <p className="text-sm text-white/90">Menu Digital - Pedidos directos sin comisiones</p>
         </div>
       </header>
 
@@ -223,9 +223,9 @@ export default function MenuStorefront({ tenant, categories }: Props) {
                           key={opt.id}
                           type="button"
                           onClick={() => toggleModifier(group, opt)}
-                          className={`flex w-full items-center justify-between rounded-xl border p-3 text-sm ${
-                            active ? 'border-neutral-900 bg-neutral-50 font-medium' : 'border-neutral-200'
-                          }`}
+                          className={"flex w-full items-center justify-between rounded-xl border p-3 text-sm " + (
+                            active ? "border-neutral-900 bg-neutral-50 font-medium" : "border-neutral-200"
+                          )}
                         >
                           <span>{opt.name}</span>
                           <span className="flex items-center gap-2">
@@ -268,7 +268,7 @@ export default function MenuStorefront({ tenant, categories }: Props) {
                     <p className="font-semibold">{item.name}</p>
                     {item.modifiers && item.modifiers.length > 0 && (
                       <p className="text-xs text-neutral-500">
-                        {item.modifiers.map((m) => `+ ${m.name}`).join(', ')}
+                        {item.modifiers.map((m) => "+ " + m.name).join(", ")}
                       </p>
                     )}
                     <p className="text-sm font-bold">{formatMoney(totals.itemsBreakdown[idx].lineTotal)}</p>
@@ -296,7 +296,7 @@ export default function MenuStorefront({ tenant, categories }: Props) {
               />
               <input
                 type="text"
-                placeholder="Dirección de entrega (deja vacío si recoges)"
+                placeholder="Direccion de entrega (deja vacio si recoges)"
                 value={deliveryAddress}
                 onChange={(e) => setDeliveryAddress(e.target.value)}
                 className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-sm"

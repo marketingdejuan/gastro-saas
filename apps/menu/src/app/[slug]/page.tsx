@@ -1,6 +1,6 @@
-import { notFound } from 'next/navigation';
-import { prisma } from '@repo/database';
-import MenuStorefront from '@/components/MenuStorefront';
+import { notFound } from "next/navigation";
+import { prisma } from "@repo/database";
+import MenuStorefront from "@/components/MenuStorefront";
 
 export default async function TenantMenuPage({
   params,
@@ -14,13 +14,13 @@ export default async function TenantMenuPage({
     include: {
       categories: {
         where: { isActive: true },
-        orderBy: { sortOrder: 'asc' },
+        orderBy: { sortOrder: "asc" },
         include: {
           products: {
             where: { isAvailable: true },
             include: {
               modifiers: {
-                orderBy: { sortOrder: 'asc' },
+                orderBy: { sortOrder: "asc" },
                 include: {
                   modifierGroup: {
                     include: {
@@ -69,7 +69,7 @@ export default async function TenantMenuPage({
         slug: tenant.slug,
         currency: tenant.currency,
         whatsappPhone: tenant.whatsappPhone,
-        primaryColor: theme.primaryColor || '#E11D48',
+        primaryColor: theme.primaryColor || "#E11D48",
       }}
       categories={serializedCategories}
     />

@@ -66,6 +66,7 @@ export default function MerchantAdminPage() {
   const slug = params?.slug || 'la-hamburgueseria';
 
   const [tab, setTab] = useState<'ORDERS' | 'CATALOG'>('ORDERS');
+  const [orderFilter, setOrderFilter] = useState<'ALL' | 'ACTIVE' | 'DELIVERED'>('ALL');
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [products, setProducts] = useState<CatalogProductRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -165,6 +166,18 @@ export default function MerchantAdminPage() {
     fetchProducts();
   }
 
+  const visibleOrders = useMemo(() => {
+    if (orderFilter === 'ACTIVE') {
+      return orders.filter(
+        (o) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED',
+      );
+    }
+    if (orderFilter === 'DELIVERED') {
+      return orders.filter((o) => o.status === 'DELIVERED');
+    }
+    return orders;
+  }, [orders, orderFilter]);
+
   const metrics = useMemo(() => {
     const activeOrders = orders.filter(
       (o) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED',
@@ -244,32 +257,59 @@ export default function MerchantAdminPage() {
           </div>
         </section>
 
-        <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
-          <button
-            type="button"
-            onClick={() => setTab('ORDERS')}
-            className={`rounded-xl px-4 py-2.5 text-xs font-extrabold transition cursor-pointer ${
-              tab === 'ORDERS'
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70'
-            }`}
-          >
-            📋 Pedidos en Tiempo Real ({orders.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setTab('CATALOG');
-              fetchProducts();
-            }}
-            className={`rounded-xl px-4 py-2.5 text-xs font-extrabold transition cursor-pointer ${
-              tab === 'CATALOG'
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'bg-white text-slate-600 hover:bg-slate-200/70'
-            }`}
-          >
-            🍔 Catálogo y Disponibilidad ({products.length})
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTab('ORDERS')}
+              className={`rounded-xl px-4 py-2.5 text-xs font-extrabold transition cursor-pointer ${
+                tab === 'ORDERS'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:bg-slate-200/70'
+              }`}
+            >
+              📋 Pedidos en Tiempo Real ({orders.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTab('CATALOG');
+                fetchProducts();
+              }}
+              className={`rounded-xl px-4 py-2.5 text-xs font-extrabold transition cursor-pointer ${
+                tab === 'CATALOG'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:bg-slate-200/70'
+              }`}
+            >
+              🍔 Catálogo y Disponibilidad ({products.length})
+            </button>
+          </div>
+
+          {tab === 'ORDERS' && (
+            <div className="flex items-center gap-1.5">
+              {(
+                [
+                  { id: 'ALL', label: 'Todos' },
+                  { id: 'ACTIVE', label: 'Activos' },
+                  { id: 'DELIVERED', label: 'Entregados' },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setOrderFilter(f.id)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
+                    orderFilter === f.id
+                      ? 'bg-rose-600 text-white'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {tab === 'ORDERS' ? (
@@ -278,13 +318,13 @@ export default function MerchantAdminPage() {
               <div className="rounded-2xl bg-white p-8 text-center text-sm text-slate-500">
                 Cargando pedidos...
               </div>
-            ) : orders.length === 0 ? (
+            ) : visibleOrders.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center space-y-3">
                 <p className="text-base font-extrabold text-slate-800">
-                  Aún no hay pedidos registrados
+                  No hay pedidos en este filtro
                 </p>
                 <p className="text-sm text-slate-500">
-                  Haz un pedido de prueba desde el menú público y aparecerá aquí al instante.
+                  Haz un pedido de prueba desde el menú público o cambia el filtro.
                 </p>
                 <Link
                   href={`/${slug}`}
@@ -295,7 +335,7 @@ export default function MerchantAdminPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {orders.map((order) => {
+                {visibleOrders.map((order) => {
                   const statusInfo = STATUS_LABELS[order.status] || {
                     label: order.status,
                     badge: 'bg-slate-100 text-slate-800',

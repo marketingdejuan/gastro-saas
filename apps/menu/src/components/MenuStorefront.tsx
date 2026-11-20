@@ -99,6 +99,7 @@ export default function MenuStorefront({
   const [submitting, setSubmitting] = useState(false);
   const [lastOrderNumber, setLastOrderNumber] = useState<number | null>(null);
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const primaryColor =
     tenant.primaryColor || tenant.themeConfig?.primaryColor || '#E11D48';
@@ -203,6 +204,7 @@ export default function MenuStorefront({
     setSelectedProduct(null);
     setDraftModifiers({});
     setCheckoutMessage(null);
+    setErrorMessage(null);
   }
 
   function quickAddProduct(e: React.MouseEvent, product: Product) {
@@ -211,35 +213,120 @@ export default function MenuStorefront({
       openProductModal(product);
       return;
     }
-    const key = `${product.id}::`; const basePrice = Number(product.basePrice); setCart((prev) => { const existing = prev.find((i) => i.key === key); if (existing) { return prev.map((i) => i.key === key ? { ...i, quantity: i.quantity + 1 } : i, ); } return [ ...prev, { key, productId: product.id, name: product.name, basePrice, quantity: 1, selectedModifiers: [], }, ]; }); }  function updateQty(key: string, delta: number) { setCart((prev) => prev .map((item) => item.key === key ? { ...item, quantity: item.quantity + delta } : item, ) .filter((item) => item.quantity > 0), ); }  async function handleConfirmAndWhatsApp() { if (cart.length === 0) return; setSubmitting(true); setCheckoutMessage(null);  let createdOrderNumber: number | null = null;  try { const res = await fetch(`${API_URL}/orders`, {
+    const key = `${product.id}::`;
+    const basePrice = Number(product.basePrice);
+    setCart((prev) => {
+      const existing = prev.find((i) => i.key === key);
+      if (existing) {
+        return prev.map((i) =>
+          i.key === key ? { ...i, quantity: i.quantity + 1 } : i,
+        );
+      }
+      return [
+        ...prev,
+        {
+          key,
+          productId: product.id,
+          name: product.name,
+          basePrice,
+          quantity: 1,
+          selectedModifiers: [],
+        },
+      ];
+    });
+    setErrorMessage(null);
+  }
+
+  function updateQty(key: string, delta: number) {
+    setCart((prev) =>
+      prev
+        .map((item) =>
+          item.key === key ? { ...item, quantity: item.quantity + delta } : item,
+        )
+        .filter((item) => item.quantity > 0),
+    );
+  }
+
+  function resetOrderFlow() {
+    setCart([]);
+    setLastOrderNumber(null);
+    setCheckoutMessage(null);
+    setErrorMessage(null);
+    setDrawerOpen(false);
+  }
+
+  async function handleConfirmAndWhatsApp() {
+    if (cart.length === 0) return;
+
+    if (!customerName.trim()) {
+      setErrorMessage('Por favor escribe tu nombre para identificar el pedido.');
+      return;
+    }
+
+    if (orderMode === 'DELIVERY' && !deliveryAddress.trim()) {
+      setErrorMessage('Indica tu dirección de entrega para pedidos a domicilio.');
+      return;
+    }
+
+    setErrorMessage(null);
+    setSubmitting(true);
+    setCheckoutMessage(null);
+
+    let createdOrderNumber: number | null = null;
+
+    try {
+      const res = await fetch(`${API_URL}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           slug: tenant.slug,
-          customerName: customerName.trim() || 'Cliente Menu Digital',
+          customerName: customerName.trim(),
           customerPhone: customerPhone.trim() || undefined,
           deliveryAddress:
-            orderMode === 'DELIVERY'
-              ? deliveryAddress.trim() || 'Domicilio por confirmar'
-              : undefined,
-          notes: `Pago: ${paymentMethod}`, items: pricingItems, }), });  if (res.ok) { const data = await res.json(); createdOrderNumber = data?.order?.orderNumber ?? null; setLastOrderNumber(createdOrderNumber); setCheckoutMessage( createdOrderNumber ? `Pedido #${createdOrderNumber} registrado con éxito.`
-            : 'Pedido registrado con éxito.',
+            orderMode === 'DELIVERY' ? deliveryAddress.trim() : undefined,
+          notes: `Pago: ${paymentMethod}`,
+          items: pricingItems,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        createdOrderNumber = data?.order?.orderNumber ?? null;
+        setLastOrderNumber(createdOrderNumber);
+        setCheckoutMessage(
+          createdOrderNumber
+            ? `Pedido #${createdOrderNumber} guardado y listo para WhatsApp (${paymentMethod}).`
+            : `Pedido guardado y listo para WhatsApp (${paymentMethod}).`,
         );
       }
     } catch {
-      setCheckoutMessage('Pedido preparado para WhatsApp.');
+      setCheckoutMessage('Pedido preparado para enviar por WhatsApp.');
     } finally {
       setSubmitting(false);
     }
 
     const lines: string[] = [
-      `Hola *${tenant.name}*! 👋`, createdOrderNumber ? `Pedido *#${createdOrderNumber}*`
+      `Hola *${tenant.name}*! 👋`,
+      createdOrderNumber
+        ? `Pedido *#${createdOrderNumber}*`
         : 'Nuevo pedido desde Menu Digital',
-      customerName ? `Cliente: ${customerName}` : '', orderMode === 'DELIVERY' ? `Entrega: Domicilio (${deliveryAddress || 'Por confirmar'})`
+      `Cliente: ${customerName.trim()}`,
+      customerPhone.trim() ? `Teléfono: ${customerPhone.trim()}` : '',
+      orderMode === 'DELIVERY'
+        ? `Entrega: Domicilio (${deliveryAddress.trim()})`
         : 'Entrega: Recoger en tienda',
-      `Pago: ${paymentMethod}`, '', '*Detalle del pedido:*', ...cart.map((item) => { const modsText = item.selectedModifiers.length > 0 ? ` (${item.selectedModifiers.map((m) => m.name).join(', ')})`
+      `Pago: ${paymentMethod}`,
+      '',
+      '*Detalle del pedido:*',
+      ...cart.map((item) => {
+        const modsText =
+          item.selectedModifiers.length > 0
+            ? ` (${item.selectedModifiers.map((m) => m.name).join(', ')})`
             : '';
-        return `• ${item.quantity}x${item.name}${modsText}`; }), '', `*Total: ${formatMoney(totals.total, tenant.currency)}*`,
+        return `• ${item.quantity}x ${item.name}${modsText}`;
+      }),
+      '',
+      `*Total: ${formatMoney(totals.total, tenant.currency)}*`,
     ].filter(Boolean);
 
     const phone = (tenant.whatsappPhone || '573000000000').replace(/\D/g, '');
@@ -253,7 +340,25 @@ export default function MenuStorefront({
         <div
           className="absolute inset-0 opacity-30 blur-3xl pointer-events-none"
           style={{
-            background: `radial-gradient(circle at 15% 20%, ${primaryColor}, transparent 55\%), radial-gradient(circle at 85\% 30\%, #f97316, transparent 50\%)`, }} /> <div className="relative mx-auto max-w-5xl px-4 py-8 sm:px-6"> <div className="flex flex-wrap items-center justify-between gap-4"> <div className="space-y-2"> <div className="flex flex-wrap items-center gap-2"> <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300"> <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" /> Abierto ahora · Pedido Directo </span> <Link href={`/${tenant.slug}/admin`}
+            background: `radial-gradient(circle at 15% 20%, ${primaryColor}, transparent 55%), radial-gradient(circle at 85% 30%, #f97316, transparent 50%)`,
+          }}
+        />
+        <div className="relative mx-auto max-w-5xl px-4 py-8 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href="/"
+                  className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-white/15 transition"
+                >
+                  ← Comercios
+                </Link>
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Abierto ahora · Pedido Directo
+                </span>
+                <Link
+                  href={`/${tenant.slug}/admin`}
                   className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-white/20 transition"
                 >
                   ⚙ Panel Dueño
@@ -637,7 +742,7 @@ export default function MenuStorefront({
                       type="text"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Nombre completo"
+                      placeholder="Nombre completo *"
                       className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
                     />
                     <input
@@ -652,7 +757,7 @@ export default function MenuStorefront({
                         type="text"
                         value={deliveryAddress}
                         onChange={(e) => setDeliveryAddress(e.target.value)}
-                        placeholder="Dirección y barrio de entrega"
+                        placeholder="Dirección y barrio de entrega *"
                         className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
                       />
                     )}
@@ -684,9 +789,22 @@ export default function MenuStorefront({
                 </div>
               )}
 
+              {errorMessage && (
+                <div className="rounded-2xl bg-rose-50 border border-rose-200 p-3.5 text-xs font-bold text-rose-700">
+                  ⚠️ {errorMessage}
+                </div>
+              )}
+
               {checkoutMessage && (
-                <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-3.5 text-xs font-bold text-emerald-800">
-                  ✅ {checkoutMessage}
+                <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-3.5 text-xs font-bold text-emerald-800 space-y-2">
+                  <p>✅ {checkoutMessage}</p>
+                  <button
+                    type="button"
+                    onClick={resetOrderFlow}
+                    className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-extrabold text-white hover:bg-emerald-800 cursor-pointer"
+                  >
+                    Vaciar carrito y hacer otro pedido
+                  </button>
                 </div>
               )}
             </div>
@@ -711,7 +829,7 @@ export default function MenuStorefront({
                   {submitting
                     ? 'Guardando pedido...'
                     : lastOrderNumber
-                      ? `📲 Enviar Pedido #${lastOrderNumber} por WhatsApp`
+                      ? `📲 Reenviar Pedido #${lastOrderNumber} por WhatsApp`
                       : '📲 Confirmar y pedir por WhatsApp'}
                 </button>
               </div>

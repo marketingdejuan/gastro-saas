@@ -6,6 +6,16 @@ import type { CreateOrderDto, CreateTenantDto } from './orders.service.js';
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
+  @Get('store/:slug/status')
+  getStoreStatus(@Param('slug') slug: string) {
+    return this.ordersService.getStoreStatus(slug);
+  }
+
+  @Patch('store/:slug/status')
+  setStoreStatus(@Param('slug') slug: string, @Body('isOpen') isOpen: boolean) {
+    return this.ordersService.setStoreStatus(slug, isOpen);
+  }
+
   @Get('tenants')
   listTenants() {
     return this.ordersService.listTenants();

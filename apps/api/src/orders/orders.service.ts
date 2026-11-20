@@ -32,6 +32,49 @@ function slugifyName(name: string) {
 
 @Injectable()
 export class OrdersService {
+  async getStoreStatus(slug: string) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug },
+      include: { branches: true },
+    });
+    if (!tenant) {
+      throw new NotFoundException(`Comercio "${slug}" no encontrado`);
+    }
+    const branch = tenant.branches[0];
+    return {
+      slug: tenant.slug,
+      name: tenant.name,
+      isOpen: branch ? Boolean(branch.isOpen) : true,
+    };
+  }
+
+  async setStoreStatus(slug: string, isOpen: boolean) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug },
+      include: { branches: true },
+    });
+    if (!tenant) {
+      throw new NotFoundException(`Comercio "${slug}" no encontrado`);
+    }
+    const branch = tenant.branches[0];
+    if (branch) {
+      await prisma.branch.update({
+        where: { id: branch.id },
+        data: { isOpen: Boolean(isOpen) },
+      });
+    } else {
+      await prisma.branch.create({
+        data: {
+          tenantId: tenant.id,
+          name: "Sede Principal",
+          address: "Direccion principal",
+          isOpen: Boolean(isOpen),
+        },
+      });
+    }
+    return { slug: tenant.slug, isOpen: Boolean(isOpen) };
+  }
+
   async listTenants() {
     const tenants = await prisma.tenant.findMany({
       orderBy: { createdAt: 'desc' },

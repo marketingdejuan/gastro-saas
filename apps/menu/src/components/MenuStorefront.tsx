@@ -10,18 +10,12 @@ export interface ModifierOption {
   priceDelta: number | string;
 }
 
-export interface ModifierGroup {
+export interface SerializedModifierGroup {
   id: string;
   name: string;
-  minSelect: number;
-  maxSelect: number;
+  minSelect?: number;
+  maxSelect?: number;
   options: ModifierOption[];
-}
-
-export interface ProductModifier {
-  id: string;
-  sortOrder: number;
-  modifierGroup: ModifierGroup;
 }
 
 export interface Product {
@@ -30,7 +24,7 @@ export interface Product {
   description: string | null;
   basePrice: number | string;
   images?: string[];
-  modifiers?: ProductModifier[];
+  modifiers?: SerializedModifierGroup[];
 }
 
 export interface Category {
@@ -40,16 +34,17 @@ export interface Category {
 }
 
 export interface TenantCatalog {
-  id: string;
+  id?: string;
   name: string;
   slug: string;
   currency: string;
   whatsappPhone?: string | null;
+  primaryColor?: string;
   themeConfig?: {
     primaryColor?: string;
     mode?: string;
   } | null;
-  categories: Category[];
+  categories?: Category[];
 }
 
 interface CartEntry {
@@ -75,7 +70,18 @@ function formatMoney(value: number, currency = 'COP') {
   }).format(value);
 }
 
-export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
+export default function MenuStorefront({
+  tenant,
+  categories: propCategories,
+}: {
+  tenant: TenantCatalog;
+  categories?: Category[];
+}) {
+  const categories = useMemo(
+    () => propCategories ?? tenant.categories ?? [],
+    [propCategories, tenant.categories],
+  );
+
   const [activeCategoryId, setActiveCategoryId] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -84,7 +90,9 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [orderMode, setOrderMode] = useState<'DELIVERY' | 'TAKEOUT'>('DELIVERY');
-  const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'Nequi / Daviplata' | 'Transferencia'>('Efectivo');
+  const [paymentMethod, setPaymentMethod] = useState<
+    'Efectivo' | 'Nequi / Daviplata' | 'Transferencia'
+  >('Efectivo');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
@@ -92,7 +100,8 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
   const [lastOrderNumber, setLastOrderNumber] = useState<number | null>(null);
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
 
-  const primaryColor = tenant.themeConfig?.primaryColor || '#E11D48';
+  const primaryColor =
+    tenant.primaryColor || tenant.themeConfig?.primaryColor || '#E11D48';
 
   const pricingItems: CartItemInput[] = useMemo(
     () =>
@@ -123,7 +132,7 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
 
   const filteredCategories = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return (tenant.categories || [])
+    return categories
       .filter((cat) => activeCategoryId === 'ALL' || cat.id === activeCategoryId)
       .map((cat) => ({
         ...cat,
@@ -135,7 +144,7 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
         ),
       }))
       .filter((cat) => cat.products.length > 0);
-  }, [tenant.categories, activeCategoryId, searchQuery]);
+  }, [categories, activeCategoryId, searchQuery]);
 
   function openProductModal(product: Product) {
     setSelectedProduct(product);
@@ -202,48 +211,7 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
       openProductModal(product);
       return;
     }
-    const key = `${product.id}::`;
-    const basePrice = Number(product.basePrice);
-    setCart((prev) => {
-      const existing = prev.find((i) => i.key === key);
-      if (existing) {
-        return prev.map((i) =>
-          i.key === key ? { ...i, quantity: i.quantity + 1 } : i,
-        );
-      }
-      return [
-        ...prev,
-        {
-          key,
-          productId: product.id,
-          name: product.name,
-          basePrice,
-          quantity: 1,
-          selectedModifiers: [],
-        },
-      ];
-    });
-  }
-
-  function updateQty(key: string, delta: number) {
-    setCart((prev) =>
-      prev
-        .map((item) =>
-          item.key === key ? { ...item, quantity: item.quantity + delta } : item,
-        )
-        .filter((item) => item.quantity > 0),
-    );
-  }
-
-  async function handleConfirmAndWhatsApp() {
-    if (cart.length === 0) return;
-    setSubmitting(true);
-    setCheckoutMessage(null);
-
-    let createdOrderNumber: number | null = null;
-
-    try {
-      const res = await fetch(`${API_URL}/orders`, {
+    const key = `${product.id}::`; const basePrice = Number(product.basePrice); setCart((prev) => { const existing = prev.find((i) => i.key === key); if (existing) { return prev.map((i) => i.key === key ? { ...i, quantity: i.quantity + 1 } : i, ); } return [ ...prev, { key, productId: product.id, name: product.name, basePrice, quantity: 1, selectedModifiers: [], }, ]; }); }  function updateQty(key: string, delta: number) { setCart((prev) => prev .map((item) => item.key === key ? { ...item, quantity: item.quantity + delta } : item, ) .filter((item) => item.quantity > 0), ); }  async function handleConfirmAndWhatsApp() { if (cart.length === 0) return; setSubmitting(true); setCheckoutMessage(null);  let createdOrderNumber: number \vert{} null = null;  try { const res = await fetch(`${API_URL}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -254,18 +222,7 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
             orderMode === 'DELIVERY'
               ? deliveryAddress.trim() || 'Domicilio por confirmar'
               : undefined,
-          notes: `Pago: ${paymentMethod}`,
-          items: pricingItems,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        createdOrderNumber = data?.order?.orderNumber ?? null;
-        setLastOrderNumber(createdOrderNumber);
-        setCheckoutMessage(
-          createdOrderNumber
-            ? `Pedido #${createdOrderNumber} registrado con éxito.`
+          notes: `Pago: ${paymentMethod}`, items: pricingItems, }), });  if (res.ok) { const data = await res.json(); createdOrderNumber = data?.order?.orderNumber ?? null; setLastOrderNumber(createdOrderNumber); setCheckoutMessage( createdOrderNumber ? `Pedido #${createdOrderNumber} registrado con éxito.`
             : 'Pedido registrado con éxito.',
         );
       }
@@ -276,26 +233,13 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
     }
 
     const lines: string[] = [
-      `Hola *${tenant.name}*! 👋`,
-      createdOrderNumber
-        ? `Pedido *#${createdOrderNumber}*`
+      `Hola *${tenant.name}*! 👋`, createdOrderNumber ? `Pedido *#${createdOrderNumber}*`
         : 'Nuevo pedido desde Menu Digital',
-      customerName ? `Cliente: ${customerName}` : '',
-      orderMode === 'DELIVERY'
-        ? `Entrega: Domicilio (${deliveryAddress || 'Por confirmar'})`
+      customerName ? `Cliente: ${customerName}` : '', orderMode === 'DELIVERY' ? `Entrega: Domicilio (${deliveryAddress || 'Por confirmar'})`
         : 'Entrega: Recoger en tienda',
-      `Pago: ${paymentMethod}`,
-      '',
-      '*Detalle del pedido:*',
-      ...cart.map((item) => {
-        const modsText =
-          item.selectedModifiers.length > 0
-            ? ` (${item.selectedModifiers.map((m) => m.name).join(', ')})`
+      `Pago: ${paymentMethod}`, '', '*Detalle del pedido:*', ...cart.map((item) => { const modsText = item.selectedModifiers.length > 0 ? ` (${item.selectedModifiers.map((m) => m.name).join(', ')})`
             : '';
-        return `• ${item.quantity}x ${item.name}${modsText}`;
-      }),
-      '',
-      `*Total: ${formatMoney(totals.total, tenant.currency)}*`,
+        return `• ${item.quantity}x${item.name}${modsText}`; }), '', `*Total: ${formatMoney(totals.total, tenant.currency)}*`,
     ].filter(Boolean);
 
     const phone = (tenant.whatsappPhone || '573000000000').replace(/\D/g, '');
@@ -305,24 +249,11 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 pb-28">
-      {/* Banner superior tecnológico */}
       <header className="relative overflow-hidden bg-slate-950 text-white shadow-xl">
         <div
           className="absolute inset-0 opacity-30 blur-3xl pointer-events-none"
           style={{
-            background: `radial-gradient(circle at 15% 20%, ${primaryColor}, transparent 55%), radial-gradient(circle at 85% 30%, #f97316, transparent 50%)`,
-          }}
-        />
-        <div className="relative mx-auto max-w-5xl px-4 py-8 sm:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  Abierto ahora · Pedido Directo
-                </span>
-                <Link
-                  href={`/${tenant.slug}/admin`}
+            background: `radial-gradient(circle at 15% 20%, ${primaryColor}, transparent 55\%), radial-gradient(circle at 85\% 30\%, #f97316, transparent 50\%)`, }} /> <div className="relative mx-auto max-w-5xl px-4 py-8 sm:px-6"> <div className="flex flex-wrap items-center justify-between gap-4"> <div className="space-y-2"> <div className="flex flex-wrap items-center gap-2"> <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300"> <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" /> Abierto ahora · Pedido Directo </span> <Link href={`/${tenant.slug}/admin`}
                   className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-white/20 transition"
                 >
                   ⚙ Panel Dueño
@@ -348,7 +279,6 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
             </button>
           </div>
 
-          {/* Buscador y píldoras de categorías */}
           <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full sm:max-w-xs">
               <input
@@ -371,7 +301,7 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
               >
                 Todo el menú
               </button>
-              {(tenant.categories || []).map((cat) => (
+              {categories.map((cat) => (
                 <button
                   key={cat.id}
                   type="button"
@@ -390,7 +320,6 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
         </div>
       </header>
 
-      {/* Listado de productos */}
       <main className="mx-auto max-w-5xl px-4 pt-8 sm:px-6 space-y-10">
         {filteredCategories.length === 0 ? (
           <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center space-y-2 shadow-xs">
@@ -482,7 +411,6 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
         )}
       </main>
 
-      {/* Barra flotante inferior */}
       {totalUnits > 0 && (
         <div className="fixed bottom-4 inset-x-0 z-30 mx-auto max-w-3xl px-4">
           <button
@@ -505,7 +433,6 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
         </div>
       )}
 
-      {/* Modal de personalización */}
       {selectedProduct && (
         <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-slate-950/70 p-0 sm:p-4 backdrop-blur-xs">
           <div className="w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-white p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
@@ -532,18 +459,18 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
               </button>
             </div>
 
-            {selectedProduct.modifiers?.map((pm) => (
-              <div key={pm.id} className="space-y-2.5">
+            {selectedProduct.modifiers?.map((group) => (
+              <div key={group.id} className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-extrabold text-slate-800">
-                    {pm.modifierGroup.name}
+                    {group.name}
                   </p>
                   <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500">
                     Opcional
                   </span>
                 </div>
                 <div className="space-y-2">
-                  {pm.modifierGroup.options.map((opt) => {
+                  {group.options.map((opt) => {
                     const checked = Boolean(draftModifiers[opt.id]);
                     const deltaNum = Number(opt.priceDelta);
                     return (
@@ -593,7 +520,6 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
         </div>
       )}
 
-      {/* Drawer lateral del carrito */}
       {drawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/70 backdrop-blur-xs">
           <div className="flex h-full w-full max-w-md flex-col justify-between bg-white p-6 shadow-2xl overflow-y-auto">
@@ -673,7 +599,6 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
                     })}
                   </div>
 
-                  {/* Selector de modalidad */}
                   <div className="space-y-2">
                     <p className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
                       ¿Cómo quieres recibirlo?
@@ -704,7 +629,6 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
                     </div>
                   </div>
 
-                  {/* Datos del cliente */}
                   <div className="space-y-2.5">
                     <p className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
                       Tus datos
@@ -734,7 +658,6 @@ export default function MenuStorefront({ tenant }: { tenant: TenantCatalog }) {
                     )}
                   </div>
 
-                  {/* Método de pago */}
                   <div className="space-y-2">
                     <p className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
                       Método de pago

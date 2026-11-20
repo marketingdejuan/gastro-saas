@@ -32,7 +32,29 @@ export default function HomePage() {
 
   const loadTenants = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/orders/tenants`); if (res.ok) { const data = await res.json(); setTenants(Array.isArray(data) ? data : []); } } catch { // Si el API está iniciando, mantener lista actual } }, []);  useEffect(() => { loadTenants(); }, [loadTenants]);  async function handleCreateTenant(e: React.FormEvent) { e.preventDefault(); if (!name.trim()) return; setCreating(true); setErrorMsg(null); setCreatedTenant(null);  try { const res = await fetch(`${API_URL}/orders/tenants`, {
+      const res = await fetch(`${API_URL}/orders/tenants`);
+      if (res.ok) {
+        const data = await res.json();
+        setTenants(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // Mantener lista actual si el API está iniciando
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTenants();
+  }, [loadTenants]);
+
+  async function handleCreateTenant(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setCreating(true);
+    setErrorMsg(null);
+    setCreatedTenant(null);
+
+    try {
+      const res = await fetch(`${API_URL}/orders/tenants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -103,7 +125,6 @@ export default function HomePage() {
         </section>
 
         <section className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-          {/* Formulario crear nuevo restaurante */}
           <div className="lg:col-span-5 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur space-y-5 h-fit">
             <div>
               <h2 className="text-xl font-black text-white">
@@ -181,7 +202,13 @@ export default function HomePage() {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <Link
-                      href={`/${createdTenant.slug}`} className="rounded-lg bg-emerald-500 px-3 py-1.5 font-extrabold text-slate-950" > Abrir Menú (/{createdTenant.slug}) → </Link> <Link href={`/${createdTenant.slug}/admin`}
+                      href={`/${createdTenant.slug}`}
+                      className="rounded-lg bg-emerald-500 px-3 py-1.5 font-extrabold text-slate-950"
+                    >
+                      Abrir Menú (/{createdTenant.slug}) →
+                    </Link>
+                    <Link
+                      href={`/${createdTenant.slug}/admin`}
                       className="rounded-lg bg-white/15 px-3 py-1.5 font-bold text-white"
                     >
                       Abrir Panel Dueño
@@ -200,7 +227,6 @@ export default function HomePage() {
             </form>
           </div>
 
-          {/* Lista de restaurantes activos */}
           <div className="lg:col-span-7 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-black text-white">
@@ -245,7 +271,13 @@ export default function HomePage() {
 
                   <div className="flex items-center gap-2 pt-2 border-t border-white/10">
                     <Link
-                      href={`/${t.slug}`} className="flex-1 text-center rounded-xl bg-gradient-to-r from-rose-600 to-orange-500 px-3 py-2 text-xs font-extrabold text-white hover:opacity-95 transition" > Ver Menú </Link> <Link href={`/${t.slug}/admin`}
+                      href={`/${t.slug}`}
+                      className="flex-1 text-center rounded-xl bg-gradient-to-r from-rose-600 to-orange-500 px-3 py-2 text-xs font-extrabold text-white hover:opacity-95 transition"
+                    >
+                      Ver Menú
+                    </Link>
+                    <Link
+                      href={`/${t.slug}/admin`}
                       className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/15 transition"
                     >
                       Panel Dueño

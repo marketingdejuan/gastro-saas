@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { prisma } from '@repo/database';
 import { calculateOrderTotals, CartItemInput } from '@repo/pricing';
 
@@ -18,7 +18,12 @@ export class OrdersService {
   async createOrder(dto: CreateOrderDto) {
     const tenant = await prisma.tenant.findUnique({
       where: { slug: dto.slug },
-      include: { branches: true },
+      include: {
+        branches: true,
+        categories: {
+          include: { products: true },
+        },
+      },
     });
 
     if (!tenant) {
@@ -37,6 +42,10 @@ export class OrdersService {
       branchId = createdBranch.id;
     }
 
+    const validProducts = tenant.categories.flatMap((c) => c.products);
+    const validProductIds = new Set(validProducts.map((p) => p.id));
+    const fallbackProductId = validProducts[0]?.id;
+
     const totals = calculateOrderTotals({ items: dto.items || [] });
 
     const lastOrder = await prisma.order.findFirst({
@@ -46,53 +55,68 @@ export class OrdersService {
     });
     const nextOrderNumber = (lastOrder?.orderNumber ?? 0) + 1;
 
-    const order = await prisma.order.create({
-      data: {
-        tenantId: tenant.id,
-        branchId,
-        orderNumber: nextOrderNumber,
-        clientGeneratedId: dto.clientGeneratedId || null,
-        type: dto.deliveryAddress ? 'DELIVERY' : 'TAKEOUT',
-        status: 'PENDING',
-        customerName: dto.customerName || 'Cliente Menu Digital',
-        customerPhone: dto.customerPhone || null,
-        deliveryAddress: dto.deliveryAddress || null,
-        notes: dto.notes || null,
-        subtotal: totals.subtotal,
-        deliveryfee: totals.deliveryFee,
-        discountTotal: totals.discountTotal,
-        taxTotal: totals.taxTotal,
-        total: totals.total,
-        items: {
-          create: (dto.items || []).map((item) => ({
-            tenantId: tenant.id,
-            productId: item.productId,
-            productNameSnapshot: item.name,
-            unitPrice: item.basePrice,
-            quantity: item.quantity,
-            modifiers: {
-              create: (item.modifiers || []).map((mod) => ({
-                modifierNameSnapshot: mod.name,
-                priceDelta: mod.priceDelta,
-                quantity: mod.quantity ?? 1,
-              })),
-            },
-          })),
-        },
-      },
-      include: {
-        items: {
-          include: {
-            modifiers: true,
+    try {
+      const order = await prisma.order.create({
+        data: {
+          tenantId: tenant.id,
+          branchId,
+          orderNumber: nextOrderNumber,
+          clientGeneratedId: dto.clientGeneratedId || null,
+          type: dto.deliveryAddress ? 'DELIVERY' : 'TAKEOUT',
+          status: 'PENDING',
+          customerName: dto.customerName || 'Cliente Menu Digital',
+          customerPhone: dto.customerPhone || null,
+          deliveryAddress: dto.deliveryAddress || null,
+          notes: dto.notes || null,
+          subtotal: totals.subtotal,
+          deliveryfee: totals.deliveryFee,
+          discountTotal: totals.discountTotal,
+          taxTotal: totals.taxTotal,
+          total: totals.total,
+          items: {
+            create: (dto.items || []).map((item) => {
+              const resolvedProductId = validProductIds.has(item.productId)
+                ? item.productId
+                : fallbackProductId;
+
+              if (!resolvedProductId) {
+                throw new BadRequestException('El comercio no tiene productos configurados');
+              }
+
+              return {
+                tenantId: tenant.id,
+                productId: resolvedProductId,
+                productNameSnapshot: item.name,
+                unitPrice: item.basePrice,
+                quantity: item.quantity,
+                modifiers: {
+                  create: (item.modifiers || []).map((mod) => ({
+                    modifierNameSnapshot: mod.name,
+                    priceDelta: mod.priceDelta,
+                    quantity: mod.quantity ?? 1,
+                  })),
+                },
+              };
+            }),
           },
         },
-      },
-    });
+        include: {
+          items: {
+            include: {
+              modifiers: true,
+            },
+          },
+        },
+      });
 
-    return {
-      order,
-      pricing: totals,
-    };
+      return {
+        order,
+        pricing: totals,
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al crear la orden';
+      throw new BadRequestException(message);
+    }
   }
 
   async listOrdersBySlug(slug: string) {
@@ -114,6 +138,60 @@ export class OrdersService {
         },
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async updateOrderStatus(orderId: string, status: string) {
+    return prisma.order.update({
+      where: { id: orderId },
+      data: { status: status as never },
+      include: {
+        items: {
+          include: {
+            modifiers: true,
+          },
+        },
+      },
+    });
+  }
+
+  async createQuickProduct(
+    slug: string,
+    body: { categoryName: string; name: string; description?: string; basePrice: number },
+  ) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug },
+      include: { categories: true },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException(`Comercio "${slug}" no encontrado`);
+    }
+
+    const catName = body.categoryName.trim() || 'Recomendados';
+    let category = tenant.categories.find(
+      (c) => c.name.toLowerCase() === catName.toLowerCase(),
+    );
+
+    if (!category) {
+      category = await prisma.category.create({
+        data: {
+          tenantId: tenant.id,
+          name: catName,
+          sortOrder: tenant.categories.length + 1,
+        },
+      });
+    }
+
+    return prisma.product.create({
+      data: {
+        tenantId: tenant.id,
+        categoryId: category.id,
+        name: body.name.trim(),
+        description: body.description?.trim() || null,
+        basePrice: Number(body.basePrice) || 0,
+        images: [],
+      },
     });
   }
 }

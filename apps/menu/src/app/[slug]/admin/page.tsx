@@ -69,6 +69,8 @@ export default function MerchantAdminPage() {
   const [orderFilter, setOrderFilter] = useState<'ALL' | 'ACTIVE' | 'DELIVERED'>('ALL');
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [products, setProducts] = useState<CatalogProductRow[]>([]);
+  const [storeOpen, setStoreOpen] = useState<boolean>(true);
+  const [togglingStore, setTogglingStore] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
 
   const [categoryName, setCategoryName] = useState('Hamburguesas');
@@ -102,12 +104,44 @@ export default function MerchantAdminPage() {
     }
   }, [slug]);
 
+  const fetchStoreStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/orders/store/${slug}/status`);
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data?.isOpen === 'boolean') {
+          setStoreOpen(data.isOpen);
+        }
+      }
+    } catch {
+      // Ignorar error transitorio
+    }
+  }, [slug]);
+
   useEffect(() => {
     fetchOrders();
     fetchProducts();
+    fetchStoreStatus();
     const timer = setInterval(fetchOrders, 8000);
     return () => clearInterval(timer);
-  }, [fetchOrders, fetchProducts]);
+  }, [fetchOrders, fetchProducts, fetchStoreStatus]);
+
+  async function handleToggleStore() {
+    setTogglingStore(true);
+    try {
+      const nextState = !storeOpen;
+      const res = await fetch(`${API_URL}/orders/store/${slug}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isOpen: nextState }),
+      });
+      if (res.ok) {
+        setStoreOpen(nextState);
+      }
+    } finally {
+      setTogglingStore(false);
+    }
+  }
 
   async function handleStatusChange(orderId: string, nextStatus: string) {
     await fetch(`${API_URL}/orders/${orderId}/status`, {
@@ -179,16 +213,20 @@ export default function MerchantAdminPage() {
   }, [orders, orderFilter]);
 
   const metrics = useMemo(() => {
-    const activeOrders = orders.filter(
-      (o) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED',
-    ).length;
-    const totalSales = orders
-      .filter((o) => o.status !== 'CANCELLED')
-      .reduce((acc, o) => acc + Number(o.total || 0), 0);
+    const validOrders = orders.filter((o) => o.status !== 'CANCELLED');
+    const activeOrders = validOrders.filter((o) => o.status !== 'DELIVERED').length;
+    const totalSales = validOrders.reduce((acc, o) => acc + Number(o.total || 0), 0);
+    const avgTicket = validOrders.length > 0 ? Math.round(totalSales / validOrders.length) : 0;
+    const deliveryCount = validOrders.filter((o) => o.type === 'DELIVERY').length;
+    const takeoutCount = validOrders.filter((o) => o.type !== 'DELIVERY').length;
+
     return {
       totalOrders: orders.length,
       activeOrders,
       totalSales,
+      avgTicket,
+      deliveryCount,
+      takeoutCount,
     };
   }, [orders]);
 
@@ -208,12 +246,30 @@ export default function MerchantAdminPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={togglingStore}
+              onClick={handleToggleStore}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-extrabold border transition cursor-pointer ${
+                storeOpen
+                  ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                  : 'border-rose-400/30 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25'
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  storeOpen ? 'bg-emerald-400' : 'bg-rose-400'
+                }`}
+              />
+              {storeOpen ? 'Tienda Abierta' : 'Tienda Cerrada'}
+            </button>
             <button
               type="button"
               onClick={() => {
                 fetchOrders();
                 fetchProducts();
+                fetchStoreStatus();
               }}
               className="rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/15 transition cursor-pointer"
             >
@@ -230,13 +286,21 @@ export default function MerchantAdminPage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 space-y-8">
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl bg-white p-5 border border-slate-200 shadow-xs">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
               Ventas Totales
             </p>
             <p className="mt-2 text-3xl font-black text-emerald-600">
               {formatMoney(metrics.totalSales)}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white p-5 border border-slate-200 shadow-xs">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Ticket Promedio
+            </p>
+            <p className="mt-2 text-3xl font-black text-slate-900">
+              {formatMoney(metrics.avgTicket)}
             </p>
           </div>
           <div className="rounded-2xl bg-white p-5 border border-slate-200 shadow-xs">
@@ -249,10 +313,10 @@ export default function MerchantAdminPage() {
           </div>
           <div className="rounded-2xl bg-white p-5 border border-slate-200 shadow-xs">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Total Órdenes Recibidas
+              Modalidad (Domicilio / Local)
             </p>
-            <p className="mt-2 text-3xl font-black text-slate-900">
-              {metrics.totalOrders}
+            <p className="mt-2 text-2xl font-black text-slate-800">
+              🛵 {metrics.deliveryCount} · 🛍️ {metrics.takeoutCount}
             </p>
           </div>
         </section>

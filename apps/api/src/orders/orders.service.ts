@@ -190,8 +190,64 @@ export class OrdersService {
         name: body.name.trim(),
         description: body.description?.trim() || null,
         basePrice: Number(body.basePrice) || 0,
+        isAvailable: true,
         images: [],
       },
+      include: { category: true },
+    });
+  }
+
+  async listCatalogProducts(slug: string) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug },
+      include: {
+        categories: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            products: {
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException(`Comercio "${slug}" no encontrado`);
+    }
+
+    return tenant.categories.flatMap((cat) =>
+      cat.products.map((prod) => ({
+        ...prod,
+        basePrice: Number(prod.basePrice),
+        categoryName: cat.name,
+      })),
+    );
+  }
+
+  async updateProduct(
+    productId: string,
+    body: { isAvailable?: boolean; basePrice?: number; name?: string },
+  ) {
+    const data: {
+      isAvailable?: boolean;
+      basePrice?: number;
+      name?: string;
+    } = {};
+
+    if (typeof body.isAvailable === 'boolean') {
+      data.isAvailable = body.isAvailable;
+    }
+    if (typeof body.basePrice === 'number' && !Number.isNaN(body.basePrice)) {
+      data.basePrice = body.basePrice;
+    }
+    if (typeof body.name === 'string' && body.name.trim().length > 0) {
+      data.name = body.name.trim();
+    }
+
+    return prisma.product.update({
+      where: { id: productId },
+      data,
     });
   }
 }

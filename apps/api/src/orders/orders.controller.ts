@@ -16,14 +16,9 @@ export class OrdersController {
     return this.ordersService.listOrdersBySlug(slug || 'la-hamburgueseria');
   }
 
-  @Get(':slug')
-  findAll(@Param('slug') slug: string) {
-    return this.ordersService.listOrdersBySlug(slug);
-  }
-
-  @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.ordersService.updateOrderStatus(id, status);
+  @Get('catalog/:slug/products')
+  getProducts(@Param('slug') slug: string) {
+    return this.ordersService.listCatalogProducts(slug);
   }
 
   @Post('catalog/:slug/products')
@@ -32,5 +27,23 @@ export class OrdersController {
     @Body() body: { categoryName: string; name: string; description?: string; basePrice: number },
   ) {
     return this.ordersService.createQuickProduct(slug, body);
+  }
+
+  @Patch('catalog/products/:productId')
+  updateProduct(
+    @Param('productId') productId: string,
+    @Body() body: { isAvailable?: boolean; basePrice?: number; name?: string },
+  ) {
+    return this.ordersService.updateProduct(productId, body);
+  }
+
+  @Get(':slug')
+  findAll(@Param('slug') slug: string) {
+    return this.ordersService.listOrdersBySlug(slug);
+  }
+
+  @Patch(':id/status')
+  updateStatus(@Param('id') id: string, @Body('status') status: string) {
+    return this.ordersService.updateOrderStatus(id, status);
   }
 }

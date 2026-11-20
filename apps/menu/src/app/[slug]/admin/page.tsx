@@ -33,6 +33,15 @@ interface OrderRecord {
   items: OrderItem[];
 }
 
+interface CatalogProductRow {
+  id: string;
+  name: string;
+  description: string | null;
+  basePrice: number;
+  isAvailable: boolean;
+  categoryName: string;
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const STATUS_LABELS: Record<string, { label: string; badge: string }> = {
@@ -58,6 +67,7 @@ export default function MerchantAdminPage() {
 
   const [tab, setTab] = useState<'ORDERS' | 'CATALOG'>('ORDERS');
   const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [products, setProducts] = useState<CatalogProductRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [categoryName, setCategoryName] = useState('Hamburguesas');
@@ -79,11 +89,24 @@ export default function MerchantAdminPage() {
     }
   }, [slug]);
 
+  const fetchProducts = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/orders/catalog/${slug}/products`);
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // Ignorar error de red transitorio
+    }
+  }, [slug]);
+
   useEffect(() => {
     fetchOrders();
+    fetchProducts();
     const timer = setInterval(fetchOrders, 8000);
     return () => clearInterval(timer);
-  }, [fetchOrders]);
+  }, [fetchOrders, fetchProducts]);
 
   async function handleStatusChange(orderId: string, nextStatus: string) {
     await fetch(`${API_URL}/orders/${orderId}/status`, {
@@ -116,10 +139,30 @@ export default function MerchantAdminPage() {
         setProductDesc('');
         setProductPrice('');
         setFeedback('Producto agregado al menú público correctamente.');
+        fetchProducts();
       }
     } finally {
       setSavingProduct(false);
     }
+  }
+
+  async function handleToggleAvailability(prod: CatalogProductRow) {
+    await fetch(`${API_URL}/orders/catalog/products/${prod.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isAvailable: !prod.isAvailable }),
+    });
+    fetchProducts();
+  }
+
+  async function handleAdjustPrice(prod: CatalogProductRow, delta: number) {
+    const nextPrice = Math.max(0, Number(prod.basePrice) + delta);
+    await fetch(`${API_URL}/orders/catalog/products/${prod.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ basePrice: nextPrice }),
+    });
+    fetchProducts();
   }
 
   const metrics = useMemo(() => {
@@ -155,7 +198,10 @@ export default function MerchantAdminPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={fetchOrders}
+              onClick={() => {
+                fetchOrders();
+                fetchProducts();
+              }}
               className="rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/15 transition cursor-pointer"
             >
               ↻ Actualizar
@@ -212,14 +258,17 @@ export default function MerchantAdminPage() {
           </button>
           <button
             type="button"
-            onClick={() => setTab('CATALOG')}
+            onClick={() => {
+              setTab('CATALOG');
+              fetchProducts();
+            }}
             className={`rounded-xl px-4 py-2.5 text-xs font-extrabold transition cursor-pointer ${
               tab === 'CATALOG'
                 ? 'bg-slate-900 text-white shadow-sm'
                 : 'bg-white text-slate-600 hover:bg-slate-200/70'
             }`}
           >
-            🍔 Agregar Productos al Menú
+            🍔 Catálogo y Disponibilidad ({products.length})
           </button>
         </div>
 
@@ -331,84 +380,154 @@ export default function MerchantAdminPage() {
             )}
           </section>
         ) : (
-          <section className="max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
-            <h2 className="text-lg font-black text-slate-900">
-              Crear nuevo producto en el menú
-            </h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Se publicará inmediatamente en /{slug}.
-            </p>
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <div className="lg:col-span-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-xs h-fit">
+              <h2 className="text-lg font-black text-slate-900">
+                Crear nuevo producto
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Se publicará inmediatamente en /{slug}.
+              </p>
 
-            <form onSubmit={handleCreateProduct} className="mt-5 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Categoría
-                </label>
-                <input
-                  type="text"
-                  value={categoryName}
-                  onChange={(e) => setCategoryName(e.target.value)}
-                  placeholder="Ej: Hamburguesas, Bebidas, Combos"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nombre del producto
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
-                  placeholder="Ej: Doble Bacon Smash"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Descripción
-                </label>
-                <textarea
-                  rows={2}
-                  value={productDesc}
-                  onChange={(e) => setProductDesc(e.target.value)}
-                  placeholder="Doble carne 150g, queso cheddar fundido, tocineta crocante..."
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Precio (COP)
-                </label>
-                <input
-                  type="number"
-                  required
-                  min={0}
-                  value={productPrice}
-                  onChange={(e) => setProductPrice(e.target.value)}
-                  placeholder="28000"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
-                />
-              </div>
-
-              {feedback && (
-                <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-800">
-                  ✅ {feedback}
+              <form onSubmit={handleCreateProduct} className="mt-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Categoría
+                  </label>
+                  <input
+                    type="text"
+                    value={categoryName}
+                    onChange={(e) => setCategoryName(e.target.value)}
+                    placeholder="Ej: Hamburguesas, Bebidas, Combos"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                  />
                 </div>
-              )}
 
-              <button
-                type="submit"
-                disabled={savingProduct}
-                className="w-full rounded-2xl bg-gradient-to-r from-rose-600 to-orange-500 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-rose-500/25 hover:opacity-95 transition cursor-pointer"
-              >
-                {savingProduct ? 'Guardando...' : '+ Publicar producto en el menú'}
-              </button>
-            </form>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Nombre del producto
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="Ej: Doble Bacon Smash"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Descripción
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={productDesc}
+                    onChange={(e) => setProductDesc(e.target.value)}
+                    placeholder="Doble carne 150g, queso cheddar fundido, tocineta crocante..."
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Precio (COP)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={productPrice}
+                    onChange={(e) => setProductPrice(e.target.value)}
+                    placeholder="28000"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                {feedback && (
+                  <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-800">
+                    ✅ {feedback}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={savingProduct}
+                  className="w-full rounded-2xl bg-gradient-to-r from-rose-600 to-orange-500 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-rose-500/25 hover:opacity-95 transition cursor-pointer"
+                >
+                  {savingProduct ? 'Guardando...' : '+ Publicar producto en el menú'}
+                </button>
+              </form>
+            </div>
+
+            <div className="lg:col-span-7 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-black text-slate-900">
+                  Productos en el menú ({products.length})
+                </h2>
+              </div>
+
+              <div className="space-y-3">
+                {products.map((prod) => (
+                  <div
+                    key={prod.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-extrabold text-slate-900">
+                          {prod.name}
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                          {prod.categoryName}
+                        </span>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                            prod.isAvailable
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {prod.isAvailable ? 'Disponible' : 'Pausado'}
+                        </span>
+                      </div>
+                      <p className="text-xs font-black text-emerald-700">
+                        {formatMoney(Number(prod.basePrice))}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleAdjustPrice(prod, -1000)}
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                      >
+                        -$1k
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAdjustPrice(prod, 1000)}
+                        className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                      >
+                        +$1k
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAvailability(prod)}
+                        className={`rounded-xl px-3 py-1.5 text-xs font-extrabold text-white cursor-pointer ${
+                          prod.isAvailable
+                            ? 'bg-amber-600 hover:bg-amber-700'
+                            : 'bg-emerald-600 hover:bg-emerald-700'
+                        }`}
+                      >
+                        {prod.isAvailable ? 'Pausar' : 'Activar'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </section>
         )}
       </main>

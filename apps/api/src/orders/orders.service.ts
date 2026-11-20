@@ -59,13 +59,74 @@ export class OrdersService {
       throw new BadRequestException('El nombre del restaurante es obligatorio');
     }
 
+    const defaultPlan = await prisma.plan.findFirst();
+    if (!defaultPlan) {
+      throw new BadRequestException('No existe ningún plan configurado en la base de datos');
+    }
+
     const baseSlug = slugifyName(dto.slug?.trim() || dto.name.trim()) || 'nuevo-restaurante';
     let finalSlug = baseSlug;
     let counter = 1;
 
     while (await prisma.tenant.findUnique({ where: { slug: finalSlug } })) {
       counter += 1;
-      finalSlug = `${baseSlug}-${counter}`; }  const primaryColor = dto.primaryColor?.trim() \vert{}\vert{} '#E11D48';  try { const created = await prisma.tenant.create({ data: { name: dto.name.trim(), slug: finalSlug, currency: dto.currency?.trim() \vert{}\vert{} 'COP', whatsappPhone: dto.whatsappPhone?.trim() \vert{}\vert{} '573000000000', themeConfig: { primaryColor, mode: 'light', }, branches: { create: { name: 'Sede Principal', address: 'Direccion principal', isOpen: true, }, }, categories: { create: { name: 'Especialidades', sortOrder: 1, isActive: true, }, }, }, });  return { ...created, primaryColor, }; } catch (error: unknown) { const message = error instanceof Error ? error.message : 'Error al crear el restaurante'; throw new BadRequestException(message); } }  async createOrder(dto: CreateOrderDto) { const tenant = await prisma.tenant.findUnique({ where: { slug: dto.slug }, include: { branches: true, categories: { include: { products: true }, }, }, });  if (!tenant) { throw new NotFoundException(`Comercio "${dto.slug}" no encontrado`);
+      finalSlug = `${baseSlug}-${counter}`;
+    }
+
+    const primaryColor = dto.primaryColor?.trim() || '#E11D48';
+
+    try {
+      const created = await prisma.tenant.create({
+        data: {
+          name: dto.name.trim(),
+          slug: finalSlug,
+          plan: { connect: { id: defaultPlan.id } },
+          currency: dto.currency?.trim() || 'COP',
+          whatsappPhone: dto.whatsappPhone?.trim() || '573000000000',
+          themeConfig: {
+            primaryColor,
+            mode: 'light',
+          },
+          branches: {
+            create: {
+              name: 'Sede Principal',
+              address: 'Direccion principal',
+              isOpen: true,
+            },
+          },
+          categories: {
+            create: {
+              name: 'Especialidades',
+              sortOrder: 1,
+              isActive: true,
+            },
+          },
+        },
+      });
+
+      return {
+        ...created,
+        primaryColor,
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al crear el restaurante';
+      throw new BadRequestException(message);
+    }
+  }
+
+  async createOrder(dto: CreateOrderDto) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug: dto.slug },
+      include: {
+        branches: true,
+        categories: {
+          include: { products: true },
+        },
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException(`Comercio "${dto.slug}" no encontrado`);
     }
 
     let branchId = dto.branchId || tenant.branches[0]?.id;
@@ -242,9 +303,7 @@ export class OrdersService {
         categories: {
           orderBy: { sortOrder: 'asc' },
           include: {
-            products: {
-              orderBy: { createdAt: 'desc' },
-            },
+            products: true,
           },
         },
       },

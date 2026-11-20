@@ -13,21 +13,59 @@ export interface CreateOrderDto {
   items: CartItemInput[];
 }
 
+export interface CreateTenantDto {
+  name: string;
+  slug?: string;
+  whatsappPhone?: string;
+  primaryColor?: string;
+  currency?: string;
+}
+
+function slugifyName(name: string) {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 @Injectable()
 export class OrdersService {
-  async createOrder(dto: CreateOrderDto) {
-    const tenant = await prisma.tenant.findUnique({
-      where: { slug: dto.slug },
-      include: {
-        branches: true,
-        categories: {
-          include: { products: true },
-        },
+  async listTenants() {
+    const tenants = await prisma.tenant.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        currency: true,
+        whatsappPhone: true,
+        themeConfig: true,
       },
     });
 
-    if (!tenant) {
-      throw new NotFoundException(`Comercio "${dto.slug}" no encontrado`);
+    return tenants.map((t) => {
+      const theme = (t.themeConfig as { primaryColor?: string } | null) || {};
+      return {
+        ...t,
+        primaryColor: theme.primaryColor || '#E11D48',
+      };
+    });
+  }
+
+  async createTenant(dto: CreateTenantDto) {
+    if (!dto.name || !dto.name.trim()) {
+      throw new BadRequestException('El nombre del restaurante es obligatorio');
+    }
+
+    const baseSlug = slugifyName(dto.slug?.trim() || dto.name.trim()) || 'nuevo-restaurante';
+    let finalSlug = baseSlug;
+    let counter = 1;
+
+    while (await prisma.tenant.findUnique({ where: { slug: finalSlug } })) {
+      counter += 1;
+      finalSlug = `${baseSlug}-${counter}`; }  const primaryColor = dto.primaryColor?.trim() \vert{}\vert{} '#E11D48';  try { const created = await prisma.tenant.create({ data: { name: dto.name.trim(), slug: finalSlug, currency: dto.currency?.trim() \vert{}\vert{} 'COP', whatsappPhone: dto.whatsappPhone?.trim() \vert{}\vert{} '573000000000', themeConfig: { primaryColor, mode: 'light', }, branches: { create: { name: 'Sede Principal', address: 'Direccion principal', isOpen: true, }, }, categories: { create: { name: 'Especialidades', sortOrder: 1, isActive: true, }, }, }, });  return { ...created, primaryColor, }; } catch (error: unknown) { const message = error instanceof Error ? error.message : 'Error al crear el restaurante'; throw new BadRequestException(message); } }  async createOrder(dto: CreateOrderDto) { const tenant = await prisma.tenant.findUnique({ where: { slug: dto.slug }, include: { branches: true, categories: { include: { products: true }, }, }, });  if (!tenant) { throw new NotFoundException(`Comercio "${dto.slug}" no encontrado`);
     }
 
     let branchId = dto.branchId || tenant.branches[0]?.id;

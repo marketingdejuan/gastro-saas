@@ -1,10 +1,20 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { OrdersService } from './orders.service.js';
-import type { CreateOrderDto } from './orders.service.js';
+import type { CreateOrderDto, CreateTenantDto } from './orders.service.js';
 
 @Controller('orders')
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
+
+  @Get('tenants')
+  listTenants() {
+    return this.ordersService.listTenants();
+  }
+
+  @Post('tenants')
+  createTenant(@Body() dto: CreateTenantDto) {
+    return this.ordersService.createTenant(dto);
+  }
 
   @Post()
   create(@Body() dto: CreateOrderDto) {

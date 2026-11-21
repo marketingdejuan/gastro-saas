@@ -73,12 +73,22 @@ export default function MerchantAdminPage() {
   const [togglingStore, setTogglingStore] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
 
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryFeedback, setCategoryFeedback] = useState<string | null>(null);
+
   const [categoryName, setCategoryName] = useState('Hamburguesas');
   const [productName, setProductName] = useState('');
   const [productDesc, setProductDesc] = useState('');
   const [productPrice, setProductPrice] = useState('');
   const [savingProduct, setSavingProduct] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+
+  const [editingProduct, setEditingProduct] = useState<CatalogProductRow | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const [storeName, setStoreName] = useState('');
   const [whatsappPhone, setWhatsappPhone] = useState('');
@@ -191,6 +201,22 @@ export default function MerchantAdminPage() {
     fetchOrders();
   }
 
+  async function handleCreateCategory(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    setCategoryFeedback(null);
+    const res = await fetch(`${API_URL}/orders/catalog/${slug}/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newCategoryName.trim() }),
+    });
+    if (res.ok) {
+      setCategoryName(newCategoryName.trim());
+      setNewCategoryName('');
+      setCategoryFeedback('Categoría lista para asignar productos.');
+    }
+  }
+
   async function handleCreateProduct(e: React.FormEvent) {
     e.preventDefault();
     if (!productName.trim() || !productPrice) return;
@@ -217,6 +243,47 @@ export default function MerchantAdminPage() {
       }
     } finally {
       setSavingProduct(false);
+    }
+  }
+
+  function startEditProduct(prod: CatalogProductRow) {
+    setEditingProduct(prod);
+    setEditName(prod.name);
+    setEditDesc(prod.description || '');
+    setEditPrice(String(Number(prod.basePrice)));
+    setEditCategory(prod.categoryName);
+  }
+
+  async function handleSaveEditedProduct(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingProduct) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`${API_URL}/orders/catalog/products/${editingProduct.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName,
+          description: editDesc,
+          basePrice: Number(editPrice),
+          categoryName: editCategory,
+        }),
+      });
+      if (res.ok) {
+        setEditingProduct(null);
+        fetchProducts();
+      }
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleDeleteProduct(prod: CatalogProductRow) {
+    const res = await fetch(`${API_URL}/orders/catalog/products/${prod.id}`, {
+      method: 'DELETE',
+    });
+    if (res.ok) {
+      fetchProducts();
     }
   }
 
@@ -537,84 +604,112 @@ export default function MerchantAdminPage() {
 
         {tab === 'CATALOG' && (
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <div className="lg:col-span-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-xs h-fit">
-              <h2 className="text-lg font-black text-slate-900">
-                Crear nuevo producto
-              </h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Se publicará inmediatamente en /{slug}.
-              </p>
-
-              <form onSubmit={handleCreateProduct} className="mt-5 space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Categoría
-                  </label>
+            <div className="lg:col-span-5 space-y-6">
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
+                <h2 className="text-base font-black text-slate-900">
+                  Nueva categoría
+                </h2>
+                <form onSubmit={handleCreateCategory} className="mt-3 flex gap-2">
                   <input
                     type="text"
-                    value={categoryName}
-                    onChange={(e) => setCategoryName(e.target.value)}
-                    placeholder="Ej: Hamburguesas, Bebidas, Combos"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="Ej: Bebidas, Pizzas, Postres"
+                    className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-rose-500"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nombre del producto
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={productName}
-                    onChange={(e) => setProductName(e.target.value)}
-                    placeholder="Ej: Doble Bacon Smash"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Descripción
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={productDesc}
-                    onChange={(e) => setProductDesc(e.target.value)}
-                    placeholder="Doble carne 150g, queso cheddar fundido, tocineta crocante..."
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Precio (COP)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={productPrice}
-                    onChange={(e) => setProductPrice(e.target.value)}
-                    placeholder="28000"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
-                  />
-                </div>
-
-                {feedback && (
-                  <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-800">
-                    ✅ {feedback}
-                  </div>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-extrabold text-white hover:bg-slate-800 cursor-pointer"
+                  >
+                    + Crear
+                  </button>
+                </form>
+                {categoryFeedback && (
+                  <p className="mt-2 text-xs font-bold text-emerald-700">
+                    ✅ {categoryFeedback}
+                  </p>
                 )}
+              </div>
 
-                <button
-                  type="submit"
-                  disabled={savingProduct}
-                  className="w-full rounded-2xl bg-gradient-to-r from-rose-600 to-orange-500 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-rose-500/25 hover:opacity-95 transition cursor-pointer"
-                >
-                  {savingProduct ? 'Guardando...' : '+ Publicar producto en el menú'}
-                </button>
-              </form>
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
+                <h2 className="text-lg font-black text-slate-900">
+                  Crear nuevo producto
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Se publicará inmediatamente en /{slug}.
+                </p>
+
+                <form onSubmit={handleCreateProduct} className="mt-5 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Categoría
+                    </label>
+                    <input
+                      type="text"
+                      value={categoryName}
+                      onChange={(e) => setCategoryName(e.target.value)}
+                      placeholder="Ej: Hamburguesas, Bebidas, Combos"
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nombre del producto
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={productName}
+                      onChange={(e) => setProductName(e.target.value)}
+                      placeholder="Ej: Doble Bacon Smash"
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Descripción
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={productDesc}
+                      onChange={(e) => setProductDesc(e.target.value)}
+                      placeholder="Doble carne 150g, queso cheddar fundido, tocineta crocante..."
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Precio (COP)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      value={productPrice}
+                      onChange={(e) => setProductPrice(e.target.value)}
+                      placeholder="28000"
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                    />
+                  </div>
+
+                  {feedback && (
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-800">
+                      ✅ {feedback}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={savingProduct}
+                    className="w-full rounded-2xl bg-gradient-to-r from-rose-600 to-orange-500 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-rose-500/25 hover:opacity-95 transition cursor-pointer"
+                  >
+                    {savingProduct ? 'Guardando...' : '+ Publicar producto en el menú'}
+                  </button>
+                </form>
+              </div>
             </div>
 
             <div className="lg:col-span-7 space-y-3">
@@ -630,8 +725,8 @@ export default function MerchantAdminPage() {
                     key={prod.id}
                     className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                    <div className="space-y-1 max-w-md">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-extrabold text-slate-900">
                           {prod.name}
                         </span>
@@ -648,12 +743,17 @@ export default function MerchantAdminPage() {
                           {prod.isAvailable ? 'Disponible' : 'Pausado'}
                         </span>
                       </div>
+                      {prod.description && (
+                        <p className="text-xs text-slate-500 line-clamp-1">
+                          {prod.description}
+                        </p>
+                      )}
                       <p className="text-xs font-black text-emerald-700">
                         {formatMoney(Number(prod.basePrice))}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() => handleAdjustPrice(prod, -1000)}
@@ -670,6 +770,13 @@ export default function MerchantAdminPage() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => startEditProduct(prod)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 hover:bg-slate-100 cursor-pointer"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleToggleAvailability(prod)}
                         className={`rounded-xl px-3 py-1.5 text-xs font-extrabold text-white cursor-pointer ${
                           prod.isAvailable
@@ -678,6 +785,13 @@ export default function MerchantAdminPage() {
                         }`}
                       >
                         {prod.isAvailable ? 'Pausar' : 'Activar'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProduct(prod)}
+                        className="rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 cursor-pointer"
+                      >
+                        Eliminar
                       </button>
                     </div>
                   </div>
@@ -759,6 +873,94 @@ export default function MerchantAdminPage() {
           </section>
         )}
       </main>
+
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-black text-slate-900">Editar producto</h3>
+              <button
+                type="button"
+                onClick={() => setEditingProduct(null)}
+                className="rounded-xl bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-200 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedProduct} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nombre
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Categoría
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Descripción
+                </label>
+                <textarea
+                  rows={2}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Precio (COP)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  value={editPrice}
+                  onChange={(e) => setEditPrice(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="rounded-xl bg-rose-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-rose-700 cursor-pointer"
+                >
+                  {savingEdit ? 'Guardando...' : 'Guardar cambios'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

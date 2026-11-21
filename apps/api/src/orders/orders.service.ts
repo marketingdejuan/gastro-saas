@@ -398,29 +398,102 @@ export class OrdersService {
     );
   }
 
+  async createCategory(slug: string, name: string) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug },
+      include: { categories: true },
+    });
+    if (!tenant) {
+      throw new NotFoundException(`Comercio "${slug}" no encontrado`);
+    }
+    const cleanName = name.trim();
+    if (!cleanName) {
+      throw new BadRequestException("El nombre de la categoría es obligatorio");
+    }
+    const existing = tenant.categories.find(
+      (c) => c.name.toLowerCase() === cleanName.toLowerCase(),
+    );
+    if (existing) {
+      return existing;
+    }
+    return prisma.category.create({
+      data: {
+        tenantId: tenant.id,
+        name: cleanName,
+        sortOrder: tenant.categories.length + 1,
+        isActive: true,
+      },
+    });
+  }
+
   async updateProduct(
     productId: string,
-    body: { isAvailable?: boolean; basePrice?: number; name?: string },
+    body: {
+      isAvailable?: boolean;
+      basePrice?: number;
+      name?: string;
+      description?: string;
+      categoryName?: string;
+    },
   ) {
+    const current = await prisma.product.findUnique({ where: { id: productId } });
+    if (!current) {
+      throw new NotFoundException("Producto no encontrado");
+    }
+
     const data: {
       isAvailable?: boolean;
       basePrice?: number;
       name?: string;
+      description?: string | null;
+      categoryId?: string;
     } = {};
 
-    if (typeof body.isAvailable === 'boolean') {
+    if (typeof body.isAvailable === "boolean") {
       data.isAvailable = body.isAvailable;
     }
-    if (typeof body.basePrice === 'number' && !Number.isNaN(body.basePrice)) {
-      data.basePrice = body.basePrice;
+    if (typeof body.basePrice === "number" && !Number.isNaN(body.basePrice)) {
+      data.basePrice = Math.max(0, body.basePrice);
     }
-    if (typeof body.name === 'string' && body.name.trim().length > 0) {
+    if (typeof body.name === "string" && body.name.trim().length > 0) {
       data.name = body.name.trim();
+    }
+    if (typeof body.description === "string") {
+      data.description = body.description.trim() || null;
+    }
+    if (typeof body.categoryName === "string" && body.categoryName.trim().length > 0) {
+      const catName = body.categoryName.trim();
+      const tenantCategories = await prisma.category.findMany({
+        where: { tenantId: current.tenantId },
+      });
+      let cat = tenantCategories.find(
+        (c) => c.name.toLowerCase() === catName.toLowerCase(),
+      );
+      if (!cat) {
+        cat = await prisma.category.create({
+          data: {
+            tenantId: current.tenantId,
+            name: catName,
+            sortOrder: tenantCategories.length + 1,
+            isActive: true,
+          },
+        });
+      }
+      data.categoryId = cat.id;
     }
 
     return prisma.product.update({
       where: { id: productId },
       data,
     });
+  }
+
+  async deleteProduct(productId: string) {
+    const existing = await prisma.product.findUnique({ where: { id: productId } });
+    if (!existing) {
+      throw new NotFoundException("Producto no encontrado");
+    }
+    await prisma.product.delete({ where: { id: productId } });
+    return { deleted: true, id: productId };
   }
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { OrdersService } from './orders.service.js';
 import type { CreateOrderDto, CreateTenantDto } from './orders.service.js';
 
@@ -49,6 +49,11 @@ export class OrdersController {
     return this.ordersService.listCatalogProducts(slug);
   }
 
+  @Post('catalog/:slug/categories')
+  createCategory(@Param('slug') slug: string, @Body('name') name: string) {
+    return this.ordersService.createCategory(slug, name);
+  }
+
   @Post('catalog/:slug/products')
   addProduct(
     @Param('slug') slug: string,
@@ -60,9 +65,21 @@ export class OrdersController {
   @Patch('catalog/products/:productId')
   updateProduct(
     @Param('productId') productId: string,
-    @Body() body: { isAvailable?: boolean; basePrice?: number; name?: string },
+    @Body()
+    body: {
+      isAvailable?: boolean;
+      basePrice?: number;
+      name?: string;
+      description?: string;
+      categoryName?: string;
+    },
   ) {
     return this.ordersService.updateProduct(productId, body);
+  }
+
+  @Delete('catalog/products/:productId')
+  deleteProduct(@Param('productId') productId: string) {
+    return this.ordersService.deleteProduct(productId);
   }
 
   @Get(':slug')

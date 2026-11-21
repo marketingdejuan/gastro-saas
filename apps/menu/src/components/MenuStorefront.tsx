@@ -316,102 +316,105 @@ export default function MenuStorefront({
   }
 
   async function handleConfirmAndWhatsApp() {
-    if (cart.length === 0) return;
+  if (cart.length === 0 || submitting) return;
 
-    if (!isStoreOpen) {
-      setErrorMessage(
-        'La tienda está cerrada temporalmente y no está recibiendo pedidos en este momento.',
-      );
-      return;
-    }
-
-    if (!customerName.trim()) {
-      setErrorMessage('Por favor escribe tu nombre para identificar el pedido.');
-      return;
-    }
-
-    if (orderMode === 'DELIVERY' && !deliveryAddress.trim()) {
-      setErrorMessage('Indica tu dirección de entrega para pedidos a domicilio.');
-      return;
-    }
-
-    setErrorMessage(null);
-    setSubmitting(true);
-    setCheckoutMessage(null);
-
-    let createdOrderNumber: number | null = null;
-
-    try {
-      const res = await fetch(`${API_URL}/orders`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slug: tenant.slug,
-          customerName: customerName.trim(),
-          customerPhone: customerPhone.trim() || undefined,
-          deliveryAddress:
-            orderMode === 'DELIVERY' ? deliveryAddress.trim() : undefined,
-          notes: `Pago: ${paymentMethod}`,
-          items: pricingItems,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        createdOrderNumber = data?.order?.orderNumber ?? null;
-        if (createdOrderNumber) {
-          setLastOrderNumber(createdOrderNumber);
-          setTrackedOrder({
-            orderNumber: createdOrderNumber,
-            status: data?.order?.status || 'PENDING',
-            total: Number(data?.order?.total || totals.total),
-          });
-          try {
-            window.localStorage.setItem(storageKey, String(createdOrderNumber));
-          } catch {
-            // Ignorar error de almacenamiento
-          }
-        }
-        setCheckoutMessage(
-          createdOrderNumber
-            ? `Pedido #${createdOrderNumber} guardado y listo para WhatsApp (${paymentMethod}).`
-            : `Pedido guardado y listo para WhatsApp (${paymentMethod}).`,
-        );
-      }
-    } catch {
-      setCheckoutMessage('Pedido preparado para enviar por WhatsApp.');
-    } finally {
-      setSubmitting(false);
-    }
-
-    const lines: string[] = [
-      `Hola *${tenant.name}*! 👋`,
-      createdOrderNumber
-        ? `Pedido *#${createdOrderNumber}*`
-        : 'Nuevo pedido desde Menu Digital',
-      `Cliente: ${customerName.trim()}`,
-      customerPhone.trim() ? `Teléfono: ${customerPhone.trim()}` : '',
-      orderMode === 'DELIVERY'
-        ? `Entrega: Domicilio (${deliveryAddress.trim()})`
-        : 'Entrega: Recoger en tienda',
-      `Pago: ${paymentMethod}`,
-      '',
-      '*Detalle del pedido:*',
-      ...cart.map((item) => {
-        const modsText =
-          item.selectedModifiers.length > 0
-            ? ` (${item.selectedModifiers.map((m) => m.name).join(', ')})`
-            : '';
-        return `• ${item.quantity}x ${item.name}${modsText}`;
-      }),
-      '',
-      `*Total: ${formatMoney(totals.total, tenant.currency)}*`,
-    ].filter(Boolean);
-
-    const phone = (tenant.whatsappPhone || '573000000000').replace(/\D/g, '');
-    const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`;
-    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  if (!isStoreOpen) {
+    setErrorMessage(
+      "La tienda está cerrada temporalmente y no está recibiendo pedidos en este momento.",
+    );
+    return;
   }
+
+  if (!customerName.trim()) {
+    setErrorMessage("Por favor escribe tu nombre para identificar el pedido.");
+    return;
+  }
+
+  if (orderMode === "DELIVERY" && !deliveryAddress.trim()) {
+    setErrorMessage("Indica tu dirección de entrega para pedidos a domicilio.");
+    return;
+  }
+
+  setErrorMessage(null);
+  setSubmitting(true);
+  setCheckoutMessage(null);
+
+  let createdOrderNumber: number | null = null;
+
+  try {
+    const res = await fetch(`${API_URL}/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slug: tenant.slug,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim() || undefined,
+        deliveryAddress:
+          orderMode === "DELIVERY" ? deliveryAddress.trim() : undefined,
+        notes: `Pago: ${paymentMethod}`,
+        items: pricingItems,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      createdOrderNumber = data?.order?.orderNumber ?? null;
+      if (createdOrderNumber) {
+        setLastOrderNumber(createdOrderNumber);
+        setTrackedOrder({
+          orderNumber: createdOrderNumber,
+          status: data?.order?.status || "PENDING",
+          total: Number(data?.order?.total || totals.total),
+        });
+        try {
+          window.localStorage.setItem(storageKey, String(createdOrderNumber));
+        } catch {
+          // Ignorar error de almacenamiento
+        }
+      }
+      setCheckoutMessage(
+        createdOrderNumber
+          ? `Pedido #${createdOrderNumber} guardado. Se abrió WhatsApp para enviar el mensaje.`
+          : "Pedido guardado. Se abrió WhatsApp para enviar el mensaje.",
+      );
+      setCart([]);
+    } else {
+      setErrorMessage("No se pudo guardar el pedido en el servidor.");
+    }
+  } catch {
+    setErrorMessage("Error de conexión al guardar el pedido.");
+  } finally {
+    setSubmitting(false);
+  }
+
+  const lines: string[] = [
+    `Hola *${tenant.name}*! 👋`,
+    createdOrderNumber
+      ? `Pedido *#${createdOrderNumber}*`
+      : "Nuevo pedido desde Menu Digital",
+    `Cliente: ${customerName.trim()}`,
+    customerPhone.trim() ? `Teléfono: ${customerPhone.trim()}` : "",
+    orderMode === "DELIVERY"
+      ? `Entrega: Domicilio (${deliveryAddress.trim()})`
+      : "Entrega: Recoger en tienda",
+    `Pago: ${paymentMethod}`,
+    "",
+    "*Detalle del pedido:*",
+    ...cart.map((item) => {
+      const modsText =
+        item.selectedModifiers.length > 0
+          ? ` (${item.selectedModifiers.map((m) => m.name).join(", ")})`
+          : "";
+      return `• ${item.quantity}x ${item.name}${modsText}`;
+    }),
+    "",
+    `*Total: ${formatMoney(totals.total, tenant.currency)}*`,
+  ].filter(Boolean);
+
+  const phone = (tenant.whatsappPhone || "573000000000").replace(/\D/g, "");
+  const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(lines.join("\n"))}`;
+  window.open(waUrl, "_blank", "noopener,noreferrer");
+}
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 pb-28">

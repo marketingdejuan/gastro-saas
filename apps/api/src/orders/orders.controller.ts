@@ -24,6 +24,11 @@ export class OrdersController {
     return this.ordersService.updateStoreConfig(slug, body);
   }
 
+  @Get('health')
+  health() {
+    return { status: "ok", timestamp: new Date().toISOString() };
+  }
+
   @Get('tenants')
   listTenants() {
     return this.ordersService.listTenants();

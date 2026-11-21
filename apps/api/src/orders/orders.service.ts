@@ -554,17 +554,20 @@ export class OrdersService {
           minSelect: 0,
           maxSelect: 5,
           options: {
-            create: {
-              name: cleanOptionName,
-              priceDelta,
-              isAvailable: true,
-            },
+            create: [
+              {
+                tenantId: product.tenantId,
+                name: cleanOptionName,
+                priceDelta,
+                isAvailable: true,
+              },
+            ],
           },
         },
         include: { options: true },
       });
 
-      const createdLink = await prisma.productModifier.create({
+      const createdLink = await prisma.productModifierGroup.create({
         data: {
           productId: product.id,
           modifierGroupId: createdGroup.id,
@@ -578,7 +581,8 @@ export class OrdersService {
 
     const createdOption = await prisma.modifierOption.create({
       data: {
-        modifierGroupId: link.modifierGroup.id,
+        tenantId: product.tenantId,
+        group: { connect: { id: link.modifierGroup.id } },
         name: cleanOptionName,
         priceDelta,
         isAvailable: true,

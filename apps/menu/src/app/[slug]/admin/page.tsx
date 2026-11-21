@@ -75,6 +75,7 @@ export default function MerchantAdminPage() {
   const [products, setProducts] = useState<CatalogProductRow[]>([]);
   const [storeOpen, setStoreOpen] = useState<boolean>(true);
   const [togglingStore, setTogglingStore] = useState<boolean>(false);
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
 
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -162,6 +163,61 @@ export default function MerchantAdminPage() {
     const timer = setInterval(fetchOrders, 8000);
     return () => clearInterval(timer);
   }, [fetchOrders, fetchProducts, fetchStoreInfo]);
+
+  async function handleCopyMenuLink() {
+    try {
+      const url = `${window.location.origin}/${slug}`;
+      await navigator.clipboard.writeText(url);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch {
+      // Ignorar si el navegador bloquea el portapapeles
+    }
+  }
+
+  function handlePrintOrder(order: OrderRecord) {
+    const win = window.open("", "_blank", "width=420,height=640");
+    if (!win) return;
+    const itemsHtml = order.items
+      .map((item) => {
+        const mods =
+          item.modifiers && item.modifiers.length > 0
+            ? `<div style="font-size:12px;color:#555;padding-left:12px;">+ ${item.modifiers
+                .map((m) => m.modifierNameSnapshot)
+                .join(", ")}</div>`
+            : "";
+        return `<div style="margin-bottom:8px;"><strong>${item.quantity}x ${item.productNameSnapshot}</strong>${mods}</div>`;
+      })
+      .join("");
+
+    win.document.write(`
+      <html>
+        <head>
+          <title>Comanda #${order.orderNumber}</title>
+          <style>
+            body { font-family: system-ui, sans-serif; padding: 20px; color: #111; }
+            h1 { margin: 0 0 6px; font-size: 22px; }
+            .meta { font-size: 13px; color: #444; margin-bottom: 14px; border-bottom: 1px dashed #999; padding-bottom: 10px; }
+            .total { border-top: 1px dashed #999; padding-top: 10px; margin-top: 12px; font-size: 16px; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Pedido #${order.orderNumber}</h1>
+          <div class="meta">
+            <div><strong>Comercio:</strong> /${slug}</div>
+            <div><strong>Cliente:</strong> ${order.customerName || "Cliente"} ${order.customerPhone ? "(" + order.customerPhone + ")" : ""}</div>
+            <div><strong>Tipo:</strong> ${order.type === "DELIVERY" ? "Domicilio - " + (order.deliveryAddress || "") : "Recoger en local"}</div>
+            ${order.notes ? `<div><strong>Notas:</strong> ${order.notes}</div>` : ""}
+          </div>
+          <div>${itemsHtml}</div>
+          <div class="total">Total: ${formatMoney(Number(order.total))}</div>
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
 
   async function handleToggleStore() {
     setTogglingStore(true);
@@ -453,6 +509,13 @@ export default function MerchantAdminPage() {
             >
               ↻ Actualizar
             </button>
+            <button
+              type="button"
+              onClick={handleCopyMenuLink}
+              className="rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/15 transition cursor-pointer"
+            >
+              {copiedLink ? "✓ Enlace copiado" : "🔗 Copiar enlace"}
+            </button>
             <Link
               href={`/${slug}`}
               className="rounded-xl bg-gradient-to-r from-rose-600 to-orange-500 px-4 py-2 text-xs font-extrabold text-white shadow-lg shadow-rose-600/25 hover:opacity-95 transition"
@@ -689,6 +752,13 @@ export default function MerchantAdminPage() {
                           className="rounded-xl bg-slate-800 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-900 cursor-pointer"
                         >
                           📦 Entregado
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePrintOrder(order)}
+                          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                        >
+                          🖨️ Comanda
                         </button>
                       </div>
                     </article>

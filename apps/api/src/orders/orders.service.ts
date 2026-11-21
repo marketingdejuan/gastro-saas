@@ -294,6 +294,34 @@ export class OrdersService {
     }
   }
 
+  async trackOrder(slug: string, orderNumber: number) {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) {
+      throw new NotFoundException(`Comercio "${slug}" no encontrado`);
+    }
+    const order = await prisma.order.findFirst({
+      where: {
+        tenantId: tenant.id,
+        orderNumber: Number(orderNumber),
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        type: true,
+        total: true,
+        createdAt: true,
+      },
+    });
+    if (!order) {
+      throw new NotFoundException("Pedido no encontrado");
+    }
+    return {
+      ...order,
+      total: Number(order.total),
+    };
+  }
+
   async listOrdersBySlug(slug: string) {
     const tenant = await prisma.tenant.findUnique({
       where: { slug },

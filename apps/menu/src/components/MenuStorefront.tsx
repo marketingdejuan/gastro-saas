@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { calculateOrderTotals, CartItemInput } from '@repo/pricing';
 
@@ -61,7 +61,22 @@ interface CartEntry {
   }[];
 }
 
+interface TrackedOrder {
+  orderNumber: number;
+  status: string;
+  total: number;
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+const ORDER_STATUS_TEXT: Record<string, string> = {
+  PENDING: 'Nuevo / Pendiente',
+  ACCEPTED: 'Aceptado',
+  PREPARING: 'En cocina',
+  READY: 'Listo para entregar',
+  DELIVERED: 'Entregado',
+  CANCELLED: 'Cancelado',
+};
 
 function formatMoney(value: number, currency = 'COP') {
   return new Intl.NumberFormat('es-CO', {
@@ -99,11 +114,56 @@ export default function MenuStorefront({
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [lastOrderNumber, setLastOrderNumber] = useState<number | null>(null);
+  const [trackedOrder, setTrackedOrder] = useState<TrackedOrder | null>(null);
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const primaryColor =
     tenant.primaryColor || tenant.themeConfig?.primaryColor || '#E11D48';
+  const isStoreOpen = tenant.isOpen !== false;
+  const storageKey = `gastroflow_last_order_${tenant.slug}`;
+
+  const pollTrackedOrder = useCallback(
+    async (num: number) => {
+      try {
+        const res = await fetch(`${API_URL}/orders/${tenant.slug}/track/${num}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTrackedOrder({
+            orderNumber: data.orderNumber,
+            status: data.status,
+            total: Number(data.total),
+          });
+        }
+      } catch {
+        // Ignorar error de red transitorio
+      }
+    },
+    [tenant.slug],
+  );
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(storageKey);
+      if (saved) {
+        const parsedNum = Number(saved);
+        if (!Number.isNaN(parsedNum) && parsedNum > 0) {
+          setLastOrderNumber(parsedNum);
+          pollTrackedOrder(parsedNum);
+        }
+      }
+    } catch {
+      // Ignorar acceso restringido a localStorage
+    }
+  }, [storageKey, pollTrackedOrder]);
+
+  useEffect(() => {
+    if (!lastOrderNumber) return;
+    const timer = setInterval(() => {
+      pollTrackedOrder(lastOrderNumber);
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [lastOrderNumber, pollTrackedOrder]);
 
   const pricingItems: CartItemInput[] = useMemo(
     () =>
@@ -250,7 +310,6 @@ export default function MenuStorefront({
 
   function resetOrderFlow() {
     setCart([]);
-    setLastOrderNumber(null);
     setCheckoutMessage(null);
     setErrorMessage(null);
     setDrawerOpen(false);
@@ -258,6 +317,13 @@ export default function MenuStorefront({
 
   async function handleConfirmAndWhatsApp() {
     if (cart.length === 0) return;
+
+    if (!isStoreOpen) {
+      setErrorMessage(
+        'La tienda está cerrada temporalmente y no está recibiendo pedidos en este momento.',
+      );
+      return;
+    }
 
     if (!customerName.trim()) {
       setErrorMessage('Por favor escribe tu nombre para identificar el pedido.');
@@ -293,7 +359,19 @@ export default function MenuStorefront({
       if (res.ok) {
         const data = await res.json();
         createdOrderNumber = data?.order?.orderNumber ?? null;
-        setLastOrderNumber(createdOrderNumber);
+        if (createdOrderNumber) {
+          setLastOrderNumber(createdOrderNumber);
+          setTrackedOrder({
+            orderNumber: createdOrderNumber,
+            status: data?.order?.status || 'PENDING',
+            total: Number(data?.order?.total || totals.total),
+          });
+          try {
+            window.localStorage.setItem(storageKey, String(createdOrderNumber));
+          } catch {
+            // Ignorar error de almacenamiento
+          }
+        }
         setCheckoutMessage(
           createdOrderNumber
             ? `Pedido #${createdOrderNumber} guardado y listo para WhatsApp (${paymentMethod}).`
@@ -354,9 +432,21 @@ export default function MenuStorefront({
                 >
                   ← Comercios
                 </Link>
-                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">
-                  <span className={`h-2 w-2 rounded-full ${tenant.isOpen === false ? "bg-rose-400" : "bg-emerald-400 animate-pulse"}`} />
-                  {tenant.isOpen === false ? "Cerrado temporalmente · Solo menú" : "Abierto ahora · Pedido Directo"}
+                <span
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
+                    isStoreOpen
+                      ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300'
+                      : 'border-rose-400/30 bg-rose-500/15 text-rose-300'
+                  }`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      isStoreOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
+                    }`}
+                  />
+                  {isStoreOpen
+                    ? 'Abierto ahora · Pedido Directo'
+                    : 'Cerrado temporalmente · Solo menú'}
                 </span>
                 <Link
                   href={`/${tenant.slug}/admin`}
@@ -384,6 +474,25 @@ export default function MenuStorefront({
               </span>
             </button>
           </div>
+
+          {trackedOrder && (
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-xs backdrop-blur">
+              <div className="flex items-center gap-2">
+                <span className="font-black text-amber-300">
+                  Pedido #{trackedOrder.orderNumber}
+                </span>
+                <span className="text-slate-200">
+                  Estado actual:{' '}
+                  <strong>
+                    {ORDER_STATUS_TEXT[trackedOrder.status] || trackedOrder.status}
+                  </strong>
+                </span>
+              </div>
+              <span className="font-extrabold text-emerald-300">
+                {formatMoney(trackedOrder.total, tenant.currency)}
+              </span>
+            </div>
+          )}
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full sm:max-w-xs">
@@ -427,6 +536,12 @@ export default function MenuStorefront({
       </header>
 
       <main className="mx-auto max-w-5xl px-4 pt-8 sm:px-6 space-y-10">
+        {!isStoreOpen && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800">
+            Este restaurante figura actualmente como <strong>Cerrado temporalmente</strong>. Puedes explorar el menú, pero el envío de nuevos pedidos está pausado.
+          </div>
+        )}
+
         {filteredCategories.length === 0 ? (
           <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center space-y-2 shadow-xs">
             <p className="text-base font-bold text-slate-800">
@@ -823,15 +938,17 @@ export default function MenuStorefront({
 
                 <button
                   type="button"
-                  disabled={submitting}
+                  disabled={submitting || !isStoreOpen}
                   onClick={handleConfirmAndWhatsApp}
-                  className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 py-4 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/25 transition hover:opacity-95 disabled:opacity-60 cursor-pointer"
+                  className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 py-4 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/25 transition hover:opacity-95 disabled:opacity-50 cursor-pointer"
                 >
-                  {submitting
-                    ? 'Guardando pedido...'
-                    : lastOrderNumber
-                      ? `📲 Reenviar Pedido #${lastOrderNumber} por WhatsApp`
-                      : '📲 Confirmar y pedir por WhatsApp'}
+                  {!isStoreOpen
+                    ? 'Tienda cerrada temporalmente'
+                    : submitting
+                      ? 'Guardando pedido...'
+                      : lastOrderNumber
+                        ? `📲 Reenviar Pedido #${lastOrderNumber} por WhatsApp`
+                        : '📲 Confirmar y pedir por WhatsApp'}
                 </button>
               </div>
             )}

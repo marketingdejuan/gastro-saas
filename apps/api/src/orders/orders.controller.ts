@@ -82,6 +82,14 @@ export class OrdersController {
     return this.ordersService.deleteProduct(productId);
   }
 
+  @Get(':slug/track/:orderNumber')
+  trackOrder(
+    @Param('slug') slug: string,
+    @Param('orderNumber') orderNumber: string,
+  ) {
+    return this.ordersService.trackOrder(slug, Number(orderNumber));
+  }
+
   @Get(':slug')
   findAll(@Param('slug') slug: string) {
     return this.ordersService.listOrdersBySlug(slug);

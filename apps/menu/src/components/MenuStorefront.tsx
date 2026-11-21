@@ -872,6 +872,23 @@ export default function MenuStorefront({
                       placeholder="Teléfono / WhatsApp"
                       className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
                     />
+                    {orderMode === "DELIVERY" ? (
+                      <input
+                        type="text"
+                        value={deliveryAddress}
+                        onChange={(e) => setDeliveryAddress(e.target.value)}
+                        placeholder="Dirección y barrio de entrega *"
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={tableNumber}
+                        onChange={(e) => setTableNumber(e.target.value)}
+                        placeholder="Número de mesa (opcional, ej: 4)"
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                      />
+                    )}
                     {orderMode === 'DELIVERY' && (
                       <input
                         type="text"

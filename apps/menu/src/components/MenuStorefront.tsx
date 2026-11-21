@@ -112,6 +112,7 @@ export default function MenuStorefront({
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [tableNumber, setTableNumber] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [lastOrderNumber, setLastOrderNumber] = useState<number | null>(null);
   const [trackedOrder, setTrackedOrder] = useState<TrackedOrder | null>(null);

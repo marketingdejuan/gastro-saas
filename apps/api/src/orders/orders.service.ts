@@ -8,6 +8,7 @@ export interface CreateOrderDto {
   customerName?: string;
   customerPhone?: string;
   deliveryAddress?: string;
+  tableNumber?: string;
   notes?: string;
   clientGeneratedId?: string;
   items: CartItemInput[];
@@ -242,7 +243,7 @@ export class OrdersService {
           customerName: dto.customerName || 'Cliente Menu Digital',
           customerPhone: dto.customerPhone || null,
           deliveryAddress: dto.deliveryAddress || null,
-          notes: dto.notes || null,
+          notes: dto.tableNumber ? `Mesa #${dto.tableNumber.trim()}${dto.notes ? ` · ${dto.notes}` : ""}` : (dto.notes || null),
           subtotal: totals.subtotal,
           deliveryFee: totals.deliveryFee,
           discountTotal: totals.discountTotal,

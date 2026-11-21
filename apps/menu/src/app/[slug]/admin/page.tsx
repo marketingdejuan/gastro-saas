@@ -67,6 +67,10 @@ export default function MerchantAdminPage() {
 
   const [tab, setTab] = useState<'ORDERS' | 'CATALOG' | 'SETTINGS'>('ORDERS');
   const [orderFilter, setOrderFilter] = useState<'ALL' | 'ACTIVE' | 'DELIVERED'>('ALL');
+  const [orderSearch, setOrderSearch] = useState('');
+  const [modeFilter, setModeFilter] = useState<'ALL' | 'DELIVERY' | 'TAKEOUT'>('ALL');
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [availabilityFilter, setAvailabilityFilter] = useState<'ALL' | 'AVAILABLE' | 'PAUSED'>('ALL');
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [products, setProducts] = useState<CatalogProductRow[]>([]);
   const [storeOpen, setStoreOpen] = useState<boolean>(true);
@@ -307,16 +311,42 @@ export default function MerchantAdminPage() {
   }
 
   const visibleOrders = useMemo(() => {
-    if (orderFilter === 'ACTIVE') {
-      return orders.filter(
-        (o) => o.status !== 'DELIVERED' && o.status !== 'CANCELLED',
+    const q = orderSearch.trim().toLowerCase();
+    return orders.filter((o) => {
+      if (orderFilter === "ACTIVE" && (o.status === "DELIVERED" || o.status === "CANCELLED")) {
+        return false;
+      }
+      if (orderFilter === "DELIVERED" && o.status !== "DELIVERED") {
+        return false;
+      }
+      if (modeFilter === "DELIVERY" && o.type !== "DELIVERY") {
+        return false;
+      }
+      if (modeFilter === "TAKEOUT" && o.type === "DELIVERY") {
+        return false;
+      }
+      if (!q) return true;
+      const numMatch = String(o.orderNumber).includes(q.replace(/^#/, ""));
+      const nameMatch = (o.customerName || "").toLowerCase().includes(q);
+      const phoneMatch = (o.customerPhone || "").toLowerCase().includes(q);
+      const notesMatch = (o.notes || "").toLowerCase().includes(q);
+      return numMatch || nameMatch || phoneMatch || notesMatch;
+    });
+  }, [orders, orderFilter, modeFilter, orderSearch]);
+
+  const filteredProducts = useMemo(() => {
+    const q = catalogSearch.trim().toLowerCase();
+    return products.filter((prod) => {
+      if (availabilityFilter === "AVAILABLE" && !prod.isAvailable) return false;
+      if (availabilityFilter === "PAUSED" && prod.isAvailable) return false;
+      if (!q) return true;
+      return (
+        prod.name.toLowerCase().includes(q) ||
+        (prod.description || "").toLowerCase().includes(q) ||
+        prod.categoryName.toLowerCase().includes(q)
       );
-    }
-    if (orderFilter === 'DELIVERED') {
-      return orders.filter((o) => o.status === 'DELIVERED');
-    }
-    return orders;
-  }, [orders, orderFilter]);
+    });
+  }, [products, catalogSearch, availabilityFilter]);
 
   const metrics = useMemo(() => {
     const validOrders = orders.filter((o) => o.status !== 'CANCELLED');
@@ -495,6 +525,31 @@ export default function MerchantAdminPage() {
 
         {tab === 'ORDERS' && (
           <section className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs">
+              <input
+                type="text"
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+                placeholder="🔍 Buscar pedido por #, cliente o mesa..."
+                className="w-full sm:max-w-xs rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-rose-500"
+              />
+              <div className="flex items-center gap-1.5">
+                {([
+                  { id: "ALL", label: "Todos" },
+                  { id: "DELIVERY", label: "🛵 Domicilio" },
+                  { id: "TAKEOUT", label: "🛍️ Local / Mesa" },
+                ] as const).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setModeFilter(m.id)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition cursor-pointer ${modeFilter === m.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             {loading ? (
               <div className="rounded-2xl bg-white p-8 text-center text-sm text-slate-500">
                 Cargando pedidos...
@@ -715,12 +770,37 @@ export default function MerchantAdminPage() {
             <div className="lg:col-span-7 space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-black text-slate-900">
-                  Productos en el menú ({products.length})
+                  Productos en el menú ({filteredProducts.length} / {products.length})
                 </h2>
               </div>
 
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
+                <input
+                  type="text"
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  placeholder="🔍 Filtrar producto o categoría..."
+                  className="flex-1 min-w-[180px] rounded-xl border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-rose-500"
+                />
+                <div className="flex items-center gap-1">
+                  {([
+                    { id: "ALL", label: "Todos" },
+                    { id: "AVAILABLE", label: "Disponibles" },
+                    { id: "PAUSED", label: "Pausados" },
+                  ] as const).map((af) => (
+                    <button
+                      key={af.id}
+                      type="button"
+                      onClick={() => setAvailabilityFilter(af.id)}
+                      className={`rounded-lg px-2.5 py-1 text-[11px] font-bold cursor-pointer ${availabilityFilter === af.id ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-600"}`}
+                    >
+                      {af.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="space-y-3">
-                {products.map((prod) => (
+                {filteredProducts.map((prod) => (
                   <div
                     key={prod.id}
                     className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs"

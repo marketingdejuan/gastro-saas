@@ -244,7 +244,7 @@ export class OrdersService {
           deliveryAddress: dto.deliveryAddress || null,
           notes: dto.notes || null,
           subtotal: totals.subtotal,
-          deliveryfee: totals.deliveryFee,
+          deliveryFee: totals.deliveryFee,
           discountTotal: totals.discountTotal,
           taxTotal: totals.taxTotal,
           total: totals.total,

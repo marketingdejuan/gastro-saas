@@ -517,6 +517,80 @@ export class OrdersService {
     });
   }
 
+  async addProductModifier(
+    productId: string,
+    body: { groupName?: string; optionName: string; priceDelta: number },
+  ) {
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        modifiers: {
+          include: { modifierGroup: { include: { options: true } } },
+        },
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundException("Producto no encontrado");
+    }
+
+    const cleanOptionName = (body.optionName || "").trim();
+    if (!cleanOptionName) {
+      throw new BadRequestException("El nombre de la adición es obligatorio");
+    }
+
+    const cleanGroupName = (body.groupName || "Adiciones").trim() || "Adiciones";
+    const priceDelta = Math.max(0, Number(body.priceDelta) || 0);
+
+    let link = product.modifiers.find(
+      (pm) => pm.modifierGroup.name.toLowerCase() === cleanGroupName.toLowerCase(),
+    );
+
+    if (!link) {
+      const createdGroup = await prisma.modifierGroup.create({
+        data: {
+          tenantId: product.tenantId,
+          name: cleanGroupName,
+          minSelect: 0,
+          maxSelect: 5,
+          options: {
+            create: {
+              name: cleanOptionName,
+              priceDelta,
+              isAvailable: true,
+            },
+          },
+        },
+        include: { options: true },
+      });
+
+      const createdLink = await prisma.productModifier.create({
+        data: {
+          productId: product.id,
+          modifierGroupId: createdGroup.id,
+          sortOrder: product.modifiers.length + 1,
+        },
+        include: { modifierGroup: { include: { options: true } } },
+      });
+
+      return createdLink.modifierGroup;
+    }
+
+    const createdOption = await prisma.modifierOption.create({
+      data: {
+        modifierGroupId: link.modifierGroup.id,
+        name: cleanOptionName,
+        priceDelta,
+        isAvailable: true,
+      },
+    });
+
+    return {
+      ...link.modifierGroup,
+      options: [...link.modifierGroup.options, createdOption],
+    };
+  }
+
   async deleteProduct(productId: string) {
     const existing = await prisma.product.findUnique({ where: { id: productId } });
     if (!existing) {

@@ -93,6 +93,12 @@ export default function MerchantAdminPage() {
   const [editPrice, setEditPrice] = useState('');
   const [editCategory, setEditCategory] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const [modifierTarget, setModifierTarget] = useState<CatalogProductRow | null>(null);
+  const [modGroupName, setModGroupName] = useState('Adiciones');
+  const [modOptionName, setModOptionName] = useState('');
+  const [modPriceDelta, setModPriceDelta] = useState('');
+  const [savingMod, setSavingMod] = useState(false);
+  const [modFeedback, setModFeedback] = useState<string | null>(null);
 
   const [storeName, setStoreName] = useState('');
   const [whatsappPhone, setWhatsappPhone] = useState('');
@@ -279,6 +285,42 @@ export default function MerchantAdminPage() {
       }
     } finally {
       setSavingEdit(false);
+    }
+  }
+
+  function openModifierModal(prod: CatalogProductRow) {
+    setModifierTarget(prod);
+    setModGroupName("Adiciones");
+    setModOptionName("");
+    setModPriceDelta("");
+    setModFeedback(null);
+  }
+
+  async function handleSaveModifier(e: React.FormEvent) {
+    e.preventDefault();
+    if (!modifierTarget || !modOptionName.trim()) return;
+    setSavingMod(true);
+    setModFeedback(null);
+    try {
+      const res = await fetch(
+        `${API_URL}/orders/catalog/products/${modifierTarget.id}/modifiers`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            groupName: modGroupName,
+            optionName: modOptionName,
+            priceDelta: Number(modPriceDelta) || 0,
+          }),
+        },
+      );
+      if (res.ok) {
+        setModOptionName("");
+        setModPriceDelta("");
+        setModFeedback("Adición guardada. Ya aparece al personalizar el producto en el menú.");
+      }
+    } finally {
+      setSavingMod(false);
     }
   }
 
@@ -850,6 +892,13 @@ export default function MerchantAdminPage() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => openModifierModal(prod)}
+                        className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 cursor-pointer"
+                      >
+                        + Adiciones
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => startEditProduct(prod)}
                         className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 hover:bg-slate-100 cursor-pointer"
                       >
@@ -953,6 +1002,92 @@ export default function MerchantAdminPage() {
           </section>
         )}
       </main>
+
+      {modifierTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Adiciones para {modifierTarget.name}</h3>
+                <p className="text-xs text-slate-500">Agrega extras que el cliente podrá elegir en el menú.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModifierTarget(null)}
+                className="rounded-xl bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-200 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveModifier} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Grupo de adición
+                </label>
+                <input
+                  type="text"
+                  value={modGroupName}
+                  onChange={(e) => setModGroupName(e.target.value)}
+                  placeholder="Ej: Adiciones, Salsas, Término"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nombre de la opción extra
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={modOptionName}
+                  onChange={(e) => setModOptionName(e.target.value)}
+                  placeholder="Ej: Queso cheddar extra"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Precio adicional (COP)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={modPriceDelta}
+                  onChange={(e) => setModPriceDelta(e.target.value)}
+                  placeholder="3500"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                />
+              </div>
+
+              {modFeedback && (
+                <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-800">
+                  ✅ {modFeedback}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModifierTarget(null)}
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingMod}
+                  className="rounded-xl bg-rose-600 px-5 py-2.5 text-xs font-extrabold text-white hover:bg-rose-700 cursor-pointer"
+                >
+                  {savingMod ? "Guardando..." : "+ Agregar adición"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {editingProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs">

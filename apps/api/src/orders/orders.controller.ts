@@ -77,6 +77,14 @@ export class OrdersController {
     return this.ordersService.updateProduct(productId, body);
   }
 
+  @Post('catalog/products/:productId/modifiers')
+  addProductModifier(
+    @Param('productId') productId: string,
+    @Body() body: { groupName?: string; optionName: string; priceDelta: number },
+  ) {
+    return this.ordersService.addProductModifier(productId, body);
+  }
+
   @Delete('catalog/products/:productId')
   deleteProduct(@Param('productId') productId: string) {
     return this.ordersService.deleteProduct(productId);

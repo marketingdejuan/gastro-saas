@@ -75,6 +75,39 @@ export class OrdersService {
     return { slug: tenant.slug, isOpen: Boolean(isOpen) };
   }
 
+  async updateStoreConfig(
+    slug: string,
+    body: { name?: string; whatsappPhone?: string; primaryColor?: string },
+  ) {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) {
+      throw new NotFoundException(`Comercio "${slug}" no encontrado`);
+    }
+    const currentTheme = (tenant.themeConfig as Record<string, unknown> | null) || {};
+    const nextTheme = {
+      ...currentTheme,
+      ...(body.primaryColor ? { primaryColor: body.primaryColor.trim() } : {}),
+    };
+
+    const updated = await prisma.tenant.update({
+      where: { slug },
+      data: {
+        ...(body.name && body.name.trim() ? { name: body.name.trim() } : {}),
+        ...(typeof body.whatsappPhone === "string"
+          ? { whatsappPhone: body.whatsappPhone.trim() }
+          : {}),
+        themeConfig: nextTheme as never,
+      },
+    });
+
+    return {
+      slug: updated.slug,
+      name: updated.name,
+      whatsappPhone: updated.whatsappPhone,
+      primaryColor: (nextTheme.primaryColor as string) || "#E11D48",
+    };
+  }
+
   async listTenants() {
     const tenants = await prisma.tenant.findMany({
       orderBy: { createdAt: 'desc' },

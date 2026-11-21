@@ -16,6 +16,14 @@ export class OrdersController {
     return this.ordersService.setStoreStatus(slug, isOpen);
   }
 
+  @Patch('store/:slug/config')
+  updateStoreConfig(
+    @Param('slug') slug: string,
+    @Body() body: { name?: string; whatsappPhone?: string; primaryColor?: string },
+  ) {
+    return this.ordersService.updateStoreConfig(slug, body);
+  }
+
   @Get('tenants')
   listTenants() {
     return this.ordersService.listTenants();

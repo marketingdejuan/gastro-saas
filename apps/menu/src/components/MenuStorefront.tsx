@@ -40,6 +40,7 @@ export interface TenantCatalog {
   currency: string;
   whatsappPhone?: string | null;
   primaryColor?: string;
+  isOpen?: boolean;
   themeConfig?: {
     primaryColor?: string;
     mode?: string;
@@ -354,8 +355,8 @@ export default function MenuStorefront({
                   ← Comercios
                 </Link>
                 <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  Abierto ahora · Pedido Directo
+                  <span className={`h-2 w-2 rounded-full ${tenant.isOpen === false ? "bg-rose-400" : "bg-emerald-400 animate-pulse"}`} />
+                  {tenant.isOpen === false ? "Cerrado temporalmente · Solo menú" : "Abierto ahora · Pedido Directo"}
                 </span>
                 <Link
                   href={`/${tenant.slug}/admin`}

@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@repo/database';
 import MenuStorefront from '@/components/MenuStorefront';
 
+export const dynamic = 'force-dynamic';
+
 export default async function TenantMenuPage({
   params,
 }: {
@@ -12,6 +14,7 @@ export default async function TenantMenuPage({
   const tenant = await prisma.tenant.findUnique({
     where: { slug },
     include: {
+      branches: true,
       categories: {
         where: { isActive: true },
         orderBy: { sortOrder: 'asc' },
@@ -38,7 +41,8 @@ export default async function TenantMenuPage({
 
   if (!tenant) notFound();
 
-  const theme = (tenant.themeConfig as { primaryColor?: string }) || {};
+  const theme = (tenant.themeConfig as { primaryColor?: string } | null) || {};
+  const isOpen = tenant.branches[0]?.isOpen ?? true;
 
   const serializedCategories = tenant.categories.map((cat) => ({
     id: cat.id,
@@ -65,11 +69,13 @@ export default async function TenantMenuPage({
   return (
     <MenuStorefront
       tenant={{
+        id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
         currency: tenant.currency,
         whatsappPhone: tenant.whatsappPhone,
         primaryColor: theme.primaryColor || '#E11D48',
+        isOpen,
       }}
       categories={serializedCategories}
     />

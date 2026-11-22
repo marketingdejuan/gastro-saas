@@ -44,20 +44,20 @@ export default async function TenantMenuPage({
   const theme = (tenant.themeConfig as { primaryColor?: string } | null) || {};
   const isOpen = tenant.branches[0]?.isOpen ?? true;
 
-  const serializedCategories = tenant.categories.map((cat) => ({
+  const serializedCategories = tenant.categories.map((cat: any) => ({
     id: cat.id,
     name: cat.name,
-    products: cat.products.map((prod) => ({
+    products: cat.products.map((prod: any) => ({
       id: prod.id,
       name: prod.name,
       description: prod.description,
       basePrice: Number(prod.basePrice),
-      modifiers: prod.modifiers.map((pm) => ({
+      modifiers: prod.modifiers.map((pm: any) => ({
         id: pm.modifierGroup.id,
         name: pm.modifierGroup.name,
         minSelect: pm.modifierGroup.minSelect,
         maxSelect: pm.modifierGroup.maxSelect,
-        options: pm.modifierGroup.options.map((opt) => ({
+        options: pm.modifierGroup.options.map((opt: any) => ({
           id: opt.id,
           name: opt.name,
           priceDelta: Number(opt.priceDelta),

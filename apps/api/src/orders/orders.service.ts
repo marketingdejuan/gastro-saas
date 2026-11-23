@@ -456,6 +456,21 @@ export class OrdersService {
     );
   }
 
+  async listCatalogCategories(slug: string) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug },
+      include: {
+        categories: {
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+    if (!tenant) {
+      throw new NotFoundException(`Comercio "${slug}" no encontrado`);
+    }
+    return tenant.categories;
+  }
+
   async createCategory(slug: string, name: string) {
     const tenant = await prisma.tenant.findUnique({
       where: { slug },
@@ -625,9 +640,17 @@ export class OrdersService {
   }
 
   async deleteProduct(productId: string) {
-    const existing = await prisma.product.findUnique({ where: { id: productId } });
+    const existing = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { _count: { select: { orderItems: true } } },
+    });
     if (!existing) {
       throw new NotFoundException("Producto no encontrado");
+    }
+    if (existing._count.orderItems > 0) {
+      throw new BadRequestException(
+        "Este producto ya tiene pedidos registrados. Páusalo para ocultarlo del menú sin perder el historial.",
+      );
     }
     await prisma.product.delete({ where: { id: productId } });
     return { deleted: true, id: productId };

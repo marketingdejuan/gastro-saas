@@ -71,6 +71,8 @@ export default function MerchantAdminPage() {
   const [modeFilter, setModeFilter] = useState<'ALL' | 'DELIVERY' | 'TAKEOUT'>('ALL');
   const [catalogSearch, setCatalogSearch] = useState('');
   const [availabilityFilter, setAvailabilityFilter] = useState<'ALL' | 'AVAILABLE' | 'PAUSED'>('ALL');
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [products, setProducts] = useState<CatalogProductRow[]>([]);
   const [storeOpen, setStoreOpen] = useState<boolean>(true);
@@ -119,6 +121,25 @@ export default function MerchantAdminPage() {
     }
   }, [slug]);
 
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/orders/catalog/${slug}/categories`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setCategories(data);
+          if (data.length > 0) {
+            setCategoryName((prev) =>
+              data.some((c) => c.name === prev) ? prev : data[0].name,
+            );
+          }
+        }
+      }
+    } catch {
+      // Ignorar error transitorio
+    }
+  }, [slug]);
+
   const fetchProducts = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/orders/catalog/${slug}/products`);
@@ -159,10 +180,11 @@ export default function MerchantAdminPage() {
   useEffect(() => {
     fetchOrders();
     fetchProducts();
+    fetchCategories();
     fetchStoreInfo();
     const timer = setInterval(fetchOrders, 8000);
     return () => clearInterval(timer);
-  }, [fetchOrders, fetchProducts, fetchStoreInfo]);
+  }, [fetchOrders, fetchProducts, fetchCategories, fetchStoreInfo]);
 
   async function handleCopyMenuLink() {
     try {
@@ -280,6 +302,7 @@ export default function MerchantAdminPage() {
       setCategoryName(newCategoryName.trim());
       setNewCategoryName('');
       setCategoryFeedback('Categoría lista para asignar productos.');
+      fetchCategories();
     }
   }
 
@@ -381,11 +404,16 @@ export default function MerchantAdminPage() {
   }
 
   async function handleDeleteProduct(prod: CatalogProductRow) {
+    if (!window.confirm(`¿Eliminar "${prod.name}" del catálogo?`)) return;
+    setAdminError(null);
     const res = await fetch(`${API_URL}/orders/catalog/products/${prod.id}`, {
       method: 'DELETE',
     });
     if (res.ok) {
       fetchProducts();
+    } else {
+      const err = await res.json().catch(() => null);
+      setAdminError(err?.message || "No se pudo eliminar el producto.");
     }
   }
 
@@ -527,6 +555,30 @@ export default function MerchantAdminPage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 space-y-8">
+        {adminError && (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-800">
+            <span>⚠️ {adminError}</span>
+            <button
+              type="button"
+              onClick={() => setAdminError(null)}
+              className="rounded-lg bg-rose-100 px-2.5 py-1 text-rose-900 hover:bg-rose-200 cursor-pointer"
+            >
+              Cerrar
+            </button>
+          </div>
+        )}
+        {adminError && (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-800">
+            <span>⚠️ {adminError}</span>
+            <button
+              type="button"
+              onClick={() => setAdminError(null)}
+              className="rounded-lg bg-rose-100 px-2.5 py-1 text-rose-900 hover:bg-rose-200 cursor-pointer"
+            >
+              Cerrar
+            </button>
+          </div>
+        )}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl bg-white p-5 border border-slate-200 shadow-xs">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">

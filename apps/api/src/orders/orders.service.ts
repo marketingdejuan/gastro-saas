@@ -642,12 +642,14 @@ export class OrdersService {
   async deleteProduct(productId: string) {
     const existing = await prisma.product.findUnique({
       where: { id: productId },
-      include: { _count: { select: { orderItems: true } } },
     });
     if (!existing) {
       throw new NotFoundException("Producto no encontrado");
     }
-    if (existing._count.orderItems > 0) {
+    const usedInOrders = await prisma.orderItem.count({
+      where: { productId },
+    });
+    if (usedInOrders > 0) {
       throw new BadRequestException(
         "Este producto ya tiene pedidos registrados. Páusalo para ocultarlo del menú sin perder el historial.",
       );

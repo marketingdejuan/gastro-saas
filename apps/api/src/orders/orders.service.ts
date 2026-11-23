@@ -22,6 +22,17 @@ export interface CreateTenantDto {
   currency?: string;
 }
 
+const ALLOWED_ORDER_STATUSES = [
+  "PENDING",
+  "ACCEPTED",
+  "PREPARING",
+  "READY",
+  "DELIVERED",
+  "CANCELLED",
+] as const;
+
+type AllowedOrderStatus = (typeof ALLOWED_ORDER_STATUSES)[number];
+
 function slugifyName(name: string) {
   return name
     .toLowerCase()
@@ -222,7 +233,15 @@ export class OrdersService {
     const validProductIds = new Set(validProducts.map((p) => p.id));
     const fallbackProductId = validProducts[0]?.id;
 
-    const totals = calculateOrderTotals({ items: dto.items || [] });
+    if (!Array.isArray(dto.items) || dto.items.length === 0) {
+      throw new BadRequestException("El pedido debe incluir al menos un producto");
+    }
+    const hasInvalidQty = dto.items.some((item) => !item || Number(item.quantity) <= 0);
+    if (hasInvalidQty) {
+      throw new BadRequestException("La cantidad de cada producto debe ser mayor a cero");
+    }
+
+    const totals = calculateOrderTotals({ items: dto.items });
 
     const lastOrder = await prisma.order.findFirst({
       where: { tenantId: tenant.id },
@@ -346,9 +365,19 @@ export class OrdersService {
   }
 
   async updateOrderStatus(orderId: string, status: string) {
+    const normalized = (status || "").toUpperCase() as AllowedOrderStatus;
+    if (!ALLOWED_ORDER_STATUSES.includes(normalized)) {
+      throw new BadRequestException(`Estado de pedido no válido: ${status}`);
+    }
+
+    const existing = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!existing) {
+      throw new NotFoundException("Pedido no encontrado");
+    }
+
     return prisma.order.update({
       where: { id: orderId },
-      data: { status: status as never },
+      data: { status: normalized },
       include: {
         items: {
           include: {

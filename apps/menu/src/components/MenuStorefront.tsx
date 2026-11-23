@@ -340,6 +340,8 @@ export default function MenuStorefront({
   setSubmitting(true);
   setCheckoutMessage(null);
 
+  const cartSnapshot = [...cart];
+  const totalSnapshot = totals.total;
   let createdOrderNumber: number | null = null;
 
   try {
@@ -401,7 +403,7 @@ export default function MenuStorefront({
     `Pago: ${paymentMethod}`,
     "",
     "*Detalle del pedido:*",
-    ...cart.map((item) => {
+    ...cartSnapshot.map((item) => {
       const modsText =
         item.selectedModifiers.length > 0
           ? ` (${item.selectedModifiers.map((m) => m.name).join(", ")})`
@@ -409,7 +411,7 @@ export default function MenuStorefront({
       return `• ${item.quantity}x ${item.name}${modsText}`;
     }),
     "",
-    `*Total: ${formatMoney(totals.total, tenant.currency)}*`,
+    `*Total: ${formatMoney(totalSnapshot, tenant.currency)}*`,
   ].filter(Boolean);
 
   const phone = (tenant.whatsappPhone || "573000000000").replace(/\D/g, "");

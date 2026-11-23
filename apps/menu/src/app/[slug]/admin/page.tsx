@@ -303,6 +303,9 @@ export default function MerchantAdminPage() {
       setNewCategoryName('');
       setCategoryFeedback('Categoría lista para asignar productos.');
       fetchCategories();
+    } else {
+      const err = await res.json().catch(() => null);
+      setAdminError(err?.message || "No se pudo crear la categoría.");
     }
   }
 
@@ -329,6 +332,10 @@ export default function MerchantAdminPage() {
         setProductPrice('');
         setFeedback('Producto agregado al menú público correctamente.');
         fetchProducts();
+        fetchCategories();
+      } else {
+        const err = await res.json().catch(() => null);
+        setAdminError(err?.message || "No se pudo crear el producto.");
       }
     } finally {
       setSavingProduct(false);
@@ -863,13 +870,49 @@ export default function MerchantAdminPage() {
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       Categoría
                     </label>
-                    <input
-                      type="text"
-                      value={categoryName}
-                      onChange={(e) => setCategoryName(e.target.value)}
-                      placeholder="Ej: Hamburguesas, Bebidas, Combos"
-                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
-                    />
+                    {categories.length > 0 ? (
+                      <div className="space-y-2">
+                        <select
+                          value={
+                            categories.some((c) => c.name === categoryName)
+                              ? categoryName
+                              : "__CUSTOM__"
+                          }
+                          onChange={(e) => {
+                            if (e.target.value === "__CUSTOM__") {
+                              setCategoryName("");
+                            } else {
+                              setCategoryName(e.target.value);
+                            }
+                          }}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                        >
+                          {categories.map((c) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                          <option value="__CUSTOM__">+ Otra categoría...</option>
+                        </select>
+                        {!categories.some((c) => c.name === categoryName) && (
+                          <input
+                            type="text"
+                            value={categoryName}
+                            onChange={(e) => setCategoryName(e.target.value)}
+                            placeholder="Nombre de la nueva categoría"
+                            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={categoryName}
+                        onChange={(e) => setCategoryName(e.target.value)}
+                        placeholder="Ej: Hamburguesas, Bebidas, Combos"
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-rose-500"
+                      />
+                    )}
                   </div>
 
                   <div>

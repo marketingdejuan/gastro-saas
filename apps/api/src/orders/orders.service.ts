@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { prisma } from '@repo/database';
 import { calculateOrderTotals, CartItemInput } from '@repo/pricing';
 
@@ -33,6 +33,16 @@ const ALLOWED_ORDER_STATUSES = [
 
 type AllowedOrderStatus = (typeof ALLOWED_ORDER_STATUSES)[number];
 
+const DEFAULT_ADMIN_PIN = "1234";
+
+function extractAdminPin(themeConfig: unknown): string {
+  const theme = (themeConfig as { adminPin?: unknown } | null) || {};
+  if (typeof theme.adminPin === "string" && theme.adminPin.trim().length >= 4) {
+    return theme.adminPin.trim();
+  }
+  return DEFAULT_ADMIN_PIN;
+}
+
 function slugifyName(name: string) {
   return name
     .toLowerCase()
@@ -44,6 +54,46 @@ function slugifyName(name: string) {
 
 @Injectable()
 export class OrdersService {
+  private async assertTenantPin(slug: string, providedPin?: string) {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) {
+      throw new NotFoundException(`Comercio "${slug}" no encontrado`);
+    }
+    const expectedPin = extractAdminPin(tenant.themeConfig);
+    if (!providedPin || providedPin.trim() !== expectedPin) {
+      throw new UnauthorizedException("PIN de administrador incorrecto");
+    }
+    return tenant;
+  }
+
+  private async assertTenantPinById(tenantId: string, providedPin?: string) {
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) {
+      throw new NotFoundException("Comercio no encontrado");
+    }
+    const expectedPin = extractAdminPin(tenant.themeConfig);
+    if (!providedPin || providedPin.trim() !== expectedPin) {
+      throw new UnauthorizedException("PIN de administrador incorrecto");
+    }
+    return tenant;
+  }
+
+  async verifyStorePin(slug: string, pin: string) {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) {
+      throw new NotFoundException(`Comercio "${slug}" no encontrado`);
+    }
+    const expectedPin = extractAdminPin(tenant.themeConfig);
+    if (!pin || pin.trim() !== expectedPin) {
+      throw new UnauthorizedException("PIN incorrecto");
+    }
+    return {
+      ok: true,
+      slug: tenant.slug,
+      isDefaultPin: expectedPin === DEFAULT_ADMIN_PIN,
+    };
+  }
+
   async getStoreStatus(slug: string) {
     const tenant = await prisma.tenant.findUnique({
       where: { slug },
@@ -60,7 +110,8 @@ export class OrdersService {
     };
   }
 
-  async setStoreStatus(slug: string, isOpen: boolean) {
+  async setStoreStatus(slug: string, isOpen: boolean, adminPin?: string) {
+    await this.assertTenantPin(slug, adminPin);
     const tenant = await prisma.tenant.findUnique({
       where: { slug },
       include: { branches: true },
@@ -89,16 +140,23 @@ export class OrdersService {
 
   async updateStoreConfig(
     slug: string,
-    body: { name?: string; whatsappPhone?: string; primaryColor?: string },
+    body: { name?: string; whatsappPhone?: string; primaryColor?: string; adminPin?: string },
+    adminPin?: string,
   ) {
-    const tenant = await prisma.tenant.findUnique({ where: { slug } });
-    if (!tenant) {
-      throw new NotFoundException(`Comercio "${slug}" no encontrado`);
-    }
+    const tenant = await this.assertTenantPin(slug, adminPin);
     const currentTheme = (tenant.themeConfig as Record<string, unknown> | null) || {};
+    let nextAdminPin: string | undefined;
+    if (typeof body.adminPin === "string" && body.adminPin.trim().length > 0) {
+      const cleanPin = body.adminPin.trim();
+      if (cleanPin.length < 4 || cleanPin.length > 8) {
+        throw new BadRequestException("El PIN debe tener entre 4 y 8 caracteres");
+      }
+      nextAdminPin = cleanPin;
+    }
     const nextTheme = {
       ...currentTheme,
       ...(body.primaryColor ? { primaryColor: body.primaryColor.trim() } : {}),
+      ...(nextAdminPin ? { adminPin: nextAdminPin } : {}),
     };
 
     const updated = await prisma.tenant.update({
@@ -364,7 +422,7 @@ export class OrdersService {
     });
   }
 
-  async updateOrderStatus(orderId: string, status: string) {
+  async updateOrderStatus(orderId: string, status: string, adminPin?: string) {
     const normalized = (status || "").toUpperCase() as AllowedOrderStatus;
     if (!ALLOWED_ORDER_STATUSES.includes(normalized)) {
       throw new BadRequestException(`Estado de pedido no válido: ${status}`);
@@ -374,6 +432,7 @@ export class OrdersService {
     if (!existing) {
       throw new NotFoundException("Pedido no encontrado");
     }
+    await this.assertTenantPinById(existing.tenantId, adminPin);
 
     return prisma.order.update({
       where: { id: orderId },
@@ -391,7 +450,9 @@ export class OrdersService {
   async createQuickProduct(
     slug: string,
     body: { categoryName: string; name: string; description?: string; basePrice: number },
+    adminPin?: string,
   ) {
+    await this.assertTenantPin(slug, adminPin);
     const tenant = await prisma.tenant.findUnique({
       where: { slug },
       include: { categories: true },
@@ -471,7 +532,8 @@ export class OrdersService {
     return tenant.categories;
   }
 
-  async createCategory(slug: string, name: string) {
+  async createCategory(slug: string, name: string, adminPin?: string) {
+    await this.assertTenantPin(slug, adminPin);
     const tenant = await prisma.tenant.findUnique({
       where: { slug },
       include: { categories: true },
@@ -508,11 +570,13 @@ export class OrdersService {
       description?: string;
       categoryName?: string;
     },
+    adminPin?: string,
   ) {
     const current = await prisma.product.findUnique({ where: { id: productId } });
     if (!current) {
       throw new NotFoundException("Producto no encontrado");
     }
+    await this.assertTenantPinById(current.tenantId, adminPin);
 
     const data: {
       isAvailable?: boolean;
@@ -564,6 +628,7 @@ export class OrdersService {
   async addProductModifier(
     productId: string,
     body: { groupName?: string; optionName: string; priceDelta: number },
+    adminPin?: string,
   ) {
     const product = await prisma.product.findUnique({
       where: { id: productId },
@@ -577,6 +642,7 @@ export class OrdersService {
     if (!product) {
       throw new NotFoundException("Producto no encontrado");
     }
+    await this.assertTenantPinById(product.tenantId, adminPin);
 
     const cleanOptionName = (body.optionName || "").trim();
     if (!cleanOptionName) {
@@ -639,13 +705,14 @@ export class OrdersService {
     };
   }
 
-  async deleteProduct(productId: string) {
+  async deleteProduct(productId: string, adminPin?: string) {
     const existing = await prisma.product.findUnique({
       where: { id: productId },
     });
     if (!existing) {
       throw new NotFoundException("Producto no encontrado");
     }
+    await this.assertTenantPinById(existing.tenantId, adminPin);
     const usedInOrders = await prisma.orderItem.count({
       where: { productId },
     });

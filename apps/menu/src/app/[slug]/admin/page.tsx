@@ -72,6 +72,13 @@ export default function MerchantAdminPage() {
   const [catalogSearch, setCatalogSearch] = useState('');
   const [availabilityFilter, setAvailabilityFilter] = useState<'ALL' | 'AVAILABLE' | 'PAUSED'>('ALL');
   const [adminError, setAdminError] = useState<string | null>(null);
+  const pinStorageKey = `gastroflow_admin_pin_${slug}`;
+  const [adminPin, setAdminPin] = useState<string>("");
+  const [pinInput, setPinInput] = useState<string>("");
+  const [pinUnlocked, setPinUnlocked] = useState<boolean>(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [verifyingPin, setVerifyingPin] = useState<boolean>(false);
+  const [newAdminPin, setNewAdminPin] = useState<string>("");
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [products, setProducts] = useState<CatalogProductRow[]>([]);
@@ -108,6 +115,76 @@ export default function MerchantAdminPage() {
   const [primaryColor, setPrimaryColor] = useState('#E11D48');
   const [savingConfig, setSavingConfig] = useState(false);
   const [configFeedback, setConfigFeedback] = useState<string | null>(null);
+
+  function authHeaders(): HeadersInit {
+    return adminPin
+      ? { "Content-Type": "application/json", "x-admin-pin": adminPin }
+      : { "Content-Type": "application/json" };
+  }
+
+  function handleUnauthorized() {
+    try {
+      window.sessionStorage.removeItem(pinStorageKey);
+    } catch {
+      // Ignorar
+    }
+    setAdminPin("");
+    setPinUnlocked(false);
+    setPinError("Tu sesión expiró o el PIN cambió. Ingresa el PIN nuevamente.");
+  }
+
+  async function handleVerifyPin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pinInput.trim()) return;
+    setVerifyingPin(true);
+    setPinError(null);
+    try {
+      const res = await fetch(`${API_URL}/orders/store/${slug}/verify-pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pinInput.trim() }),
+      });
+      if (res.ok) {
+        const clean = pinInput.trim();
+        setAdminPin(clean);
+        setPinUnlocked(true);
+        setPinInput("");
+        try {
+          window.sessionStorage.setItem(pinStorageKey, clean);
+        } catch {
+          // Ignorar
+        }
+      } else {
+        setPinError("PIN incorrecto. Por defecto es 1234 si aún no lo has cambiado.");
+      }
+    } catch {
+      setPinError("No se pudo verificar el PIN con el servidor.");
+    } finally {
+      setVerifyingPin(false);
+    }
+  }
+
+  function handleLockAdmin() {
+    try {
+      window.sessionStorage.removeItem(pinStorageKey);
+    } catch {
+      // Ignorar
+    }
+    setAdminPin("");
+    setPinUnlocked(false);
+  }
+
+  useEffect(() => {
+    try {
+      const saved = window.sessionStorage.getItem(pinStorageKey);
+      if (saved && saved.trim().length >= 4) {
+        setAdminPin(saved.trim());
+        setPinUnlocked(true);
+      }
+    } catch {
+      // Ignorar
+    }
+  }, [pinStorageKey]);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -247,11 +324,14 @@ export default function MerchantAdminPage() {
       const nextState = !storeOpen;
       const res = await fetch(`${API_URL}/orders/store/${slug}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ isOpen: nextState }),
       });
+      if (res.status === 401) return handleUnauthorized();
       if (res.ok) {
         setStoreOpen(nextState);
+      } else {
+        setAdminError("No se pudo cambiar el estado de la tienda.");
       }
     } finally {
       setTogglingStore(false);
@@ -263,17 +343,35 @@ export default function MerchantAdminPage() {
     setSavingConfig(true);
     setConfigFeedback(null);
     try {
+      const payload: { name: string; whatsappPhone: string; primaryColor: string; adminPin?: string } = {
+        name: storeName,
+        whatsappPhone,
+        primaryColor,
+      };
+      if (newAdminPin.trim()) {
+        payload.adminPin = newAdminPin.trim();
+      }
       const res = await fetch(`${API_URL}/orders/store/${slug}/config`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: storeName,
-          whatsappPhone,
-          primaryColor,
-        }),
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
       });
+      if (res.status === 401) return handleUnauthorized();
       if (res.ok) {
+        if (newAdminPin.trim()) {
+          const updatedPin = newAdminPin.trim();
+          setAdminPin(updatedPin);
+          try {
+            window.sessionStorage.setItem(pinStorageKey, updatedPin);
+          } catch {
+            // Ignorar
+          }
+          setNewAdminPin("");
+        }
         setConfigFeedback('Ajustes guardados. Recarga el menú público para ver los cambios.');
+      } else {
+        const err = await res.json().catch(() => null);
+        setAdminError(err?.message || "No se pudieron guardar los ajustes.");
       }
     } finally {
       setSavingConfig(false);
@@ -281,11 +379,16 @@ export default function MerchantAdminPage() {
   }
 
   async function handleStatusChange(orderId: string, nextStatus: string) {
-    await fetch(`${API_URL}/orders/${orderId}/status`, {
+    const res = await fetch(`${API_URL}/orders/${orderId}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ status: nextStatus }),
     });
+    if (res.status === 401) return handleUnauthorized();
+    if (!res.ok) {
+      setAdminError("No se pudo actualizar el estado del pedido.");
+      return;
+    }
     fetchOrders();
   }
 
@@ -295,9 +398,10 @@ export default function MerchantAdminPage() {
     setCategoryFeedback(null);
     const res = await fetch(`${API_URL}/orders/catalog/${slug}/categories`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ name: newCategoryName.trim() }),
     });
+    if (res.status === 401) return handleUnauthorized();
     if (res.ok) {
       setCategoryName(newCategoryName.trim());
       setNewCategoryName('');
@@ -318,7 +422,7 @@ export default function MerchantAdminPage() {
     try {
       const res = await fetch(`${API_URL}/orders/catalog/${slug}/products`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
           categoryName,
           name: productName,
@@ -357,7 +461,7 @@ export default function MerchantAdminPage() {
     try {
       const res = await fetch(`${API_URL}/orders/catalog/products/${editingProduct.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
           name: editName,
           description: editDesc,
@@ -392,7 +496,7 @@ export default function MerchantAdminPage() {
         `${API_URL}/orders/catalog/products/${modifierTarget.id}/modifiers`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders(),
           body: JSON.stringify({
             groupName: modGroupName,
             optionName: modOptionName,
@@ -415,7 +519,9 @@ export default function MerchantAdminPage() {
     setAdminError(null);
     const res = await fetch(`${API_URL}/orders/catalog/products/${prod.id}`, {
       method: 'DELETE',
+      headers: authHeaders(),
     });
+    if (res.status === 401) return handleUnauthorized();
     if (res.ok) {
       fetchProducts();
     } else {
@@ -425,21 +531,23 @@ export default function MerchantAdminPage() {
   }
 
   async function handleToggleAvailability(prod: CatalogProductRow) {
-    await fetch(`${API_URL}/orders/catalog/products/${prod.id}`, {
+    const res = await fetch(`${API_URL}/orders/catalog/products/${prod.id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ isAvailable: !prod.isAvailable }),
     });
+    if (res.status === 401) return handleUnauthorized();
     fetchProducts();
   }
 
   async function handleAdjustPrice(prod: CatalogProductRow, delta: number) {
     const nextPrice = Math.max(0, Number(prod.basePrice) + delta);
-    await fetch(`${API_URL}/orders/catalog/products/${prod.id}`, {
+    const res = await fetch(`${API_URL}/orders/catalog/products/${prod.id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({ basePrice: nextPrice }),
     });
+    if (res.status === 401) return handleUnauthorized();
     fetchProducts();
   }
 
@@ -499,6 +607,65 @@ export default function MerchantAdminPage() {
     };
   }, [orders]);
 
+  if (!pinUnlocked) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-3xl border border-white/15 bg-slate-900 p-7 shadow-2xl space-y-5">
+          <div className="space-y-1">
+            <span className="rounded-md bg-rose-600 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider">
+              Acceso Restringido
+            </span>
+            <h1 className="text-2xl font-black tracking-tight pt-1">
+              Panel Admin · /{slug}
+            </h1>
+            <p className="text-xs text-slate-400">
+              Ingresa tu PIN de administrador para gestionar pedidos, catálogo y ajustes.
+            </p>
+          </div>
+
+          <form onSubmit={handleVerifyPin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                PIN del comercio
+              </label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={8}
+                required
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                placeholder="••••"
+                className="w-full rounded-xl border border-white/15 bg-slate-950 px-4 py-3 text-center text-lg font-black tracking-[0.35em] text-white outline-none focus:border-rose-500"
+              />
+            </div>
+
+            {pinError && (
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/15 px-3.5 py-2.5 text-xs font-bold text-rose-200">
+                {pinError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={verifyingPin}
+              className="w-full rounded-xl bg-gradient-to-r from-rose-600 to-orange-500 py-3 text-xs font-extrabold text-white shadow-lg shadow-rose-600/25 hover:opacity-95 transition cursor-pointer"
+            >
+              {verifyingPin ? "Verificando..." : "Desbloquear panel"}
+            </button>
+          </form>
+
+          <div className="flex items-center justify-between border-t border-white/10 pt-4 text-xs text-slate-400">
+            <span>PIN inicial por defecto: 1234</span>
+            <Link href={`/${slug}`} className="font-bold text-rose-400 hover:underline">
+              ← Volver al menú
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <header className="bg-slate-950 text-white border-b border-white/10">
@@ -557,6 +724,13 @@ export default function MerchantAdminPage() {
             >
               Ver Menú Público ↗
             </Link>
+            <button
+              type="button"
+              onClick={handleLockAdmin}
+              className="rounded-xl border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-bold text-slate-300 hover:bg-white/15 transition cursor-pointer"
+            >
+              🔒 Bloquear
+            </button>
           </div>
         </div>
       </header>

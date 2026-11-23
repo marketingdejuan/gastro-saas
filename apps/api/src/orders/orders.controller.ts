@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
 import { OrdersService } from './orders.service.js';
 import type { CreateOrderDto, CreateTenantDto } from './orders.service.js';
 
@@ -11,17 +11,27 @@ export class OrdersController {
     return this.ordersService.getStoreStatus(slug);
   }
 
+  @Post('store/:slug/verify-pin')
+  verifyStorePin(@Param('slug') slug: string, @Body('pin') pin: string) {
+    return this.ordersService.verifyStorePin(slug, pin);
+  }
+
   @Patch('store/:slug/status')
-  setStoreStatus(@Param('slug') slug: string, @Body('isOpen') isOpen: boolean) {
-    return this.ordersService.setStoreStatus(slug, isOpen);
+  setStoreStatus(
+    @Param('slug') slug: string,
+    @Body('isOpen') isOpen: boolean,
+    @Headers('x-admin-pin') adminPin?: string,
+  ) {
+    return this.ordersService.setStoreStatus(slug, isOpen, adminPin);
   }
 
   @Patch('store/:slug/config')
   updateStoreConfig(
     @Param('slug') slug: string,
-    @Body() body: { name?: string; whatsappPhone?: string; primaryColor?: string },
+    @Body() body: { name?: string; whatsappPhone?: string; primaryColor?: string; adminPin?: string },
+    @Headers('x-admin-pin') adminPin?: string,
   ) {
-    return this.ordersService.updateStoreConfig(slug, body);
+    return this.ordersService.updateStoreConfig(slug, body, adminPin);
   }
 
   @Get('health')
@@ -55,16 +65,21 @@ export class OrdersController {
   }
 
   @Post('catalog/:slug/categories')
-  createCategory(@Param('slug') slug: string, @Body('name') name: string) {
-    return this.ordersService.createCategory(slug, name);
+  createCategory(
+    @Param('slug') slug: string,
+    @Body('name') name: string,
+    @Headers('x-admin-pin') adminPin?: string,
+  ) {
+    return this.ordersService.createCategory(slug, name, adminPin);
   }
 
   @Post('catalog/:slug/products')
   addProduct(
     @Param('slug') slug: string,
     @Body() body: { categoryName: string; name: string; description?: string; basePrice: number },
+    @Headers('x-admin-pin') adminPin?: string,
   ) {
-    return this.ordersService.createQuickProduct(slug, body);
+    return this.ordersService.createQuickProduct(slug, body, adminPin);
   }
 
   @Patch('catalog/products/:productId')
@@ -78,21 +93,26 @@ export class OrdersController {
       description?: string;
       categoryName?: string;
     },
+    @Headers('x-admin-pin') adminPin?: string,
   ) {
-    return this.ordersService.updateProduct(productId, body);
+    return this.ordersService.updateProduct(productId, body, adminPin);
   }
 
   @Post('catalog/products/:productId/modifiers')
   addProductModifier(
     @Param('productId') productId: string,
     @Body() body: { groupName?: string; optionName: string; priceDelta: number },
+    @Headers('x-admin-pin') adminPin?: string,
   ) {
-    return this.ordersService.addProductModifier(productId, body);
+    return this.ordersService.addProductModifier(productId, body, adminPin);
   }
 
   @Delete('catalog/products/:productId')
-  deleteProduct(@Param('productId') productId: string) {
-    return this.ordersService.deleteProduct(productId);
+  deleteProduct(
+    @Param('productId') productId: string,
+    @Headers('x-admin-pin') adminPin?: string,
+  ) {
+    return this.ordersService.deleteProduct(productId, adminPin);
   }
 
   @Get(':slug/track/:orderNumber')
@@ -109,7 +129,11 @@ export class OrdersController {
   }
 
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.ordersService.updateOrderStatus(id, status);
+  updateStatus(
+    @Param('id') id: string,
+    @Body('status') status: string,
+    @Headers('x-admin-pin') adminPin?: string,
+  ) {
+    return this.ordersService.updateOrderStatus(id, status, adminPin);
   }
 }
